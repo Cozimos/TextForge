@@ -1,3 +1,5 @@
+package textforge.parser
+
 data class NovelDocument(
     val blocks: List<NovelBlock>,
     val toc: List<TocEntry>

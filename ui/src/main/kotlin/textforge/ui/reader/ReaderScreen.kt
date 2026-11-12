@@ -1,5 +1,5 @@
 
-package textforge.package.ui.reader
+package textforge.ui.reader
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,8 +12,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import your.package.storage.NovelStore
-import your.package.storage.ReadingProgress
+import textforge.storage.NovelStore
+import textforge.storage.ReadingProgress
 import org.json.JSONArray
 
 @Composable

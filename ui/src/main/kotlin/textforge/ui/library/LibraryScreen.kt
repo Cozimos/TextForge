@@ -1,5 +1,5 @@
 
-package textforge.package.ui.library
+package textforge.ui.library
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,9 +10,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import your.package.integrations.NovelFilePicker
-import your.package.storage.NovelMetadata
-import your.package.storage.NovelStore
+import textforge.integrations.NovelFilePicker
+import textforge.storage.NovelMetadata
+import textforge.storage.NovelStore
 
 @Composable
 fun LibraryScreen(

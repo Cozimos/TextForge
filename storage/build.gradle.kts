@@ -1,7 +1,17 @@
 plugins {
-    kotlin("jvm")
+    id("com.android.library")
+    id("org.jetbrains.kotlin.android")
 }
 
-kotlin {
-    jvmToolchain(21)
+android {
+    namespace = "textforge.storage"
+    compileSdk = 36
+
+    defaultConfig {
+        minSdk = 23
+    }
+}
+
+dependencies {
+    implementation(project(":parser"))
 }

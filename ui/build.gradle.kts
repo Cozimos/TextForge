@@ -1,14 +1,31 @@
 plugins {
-    kotlin("jvm")
+    id("com.android.library")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
+}
+
+android {
+    namespace = "textforge.ui"
+    compileSdk = 36
+
+    defaultConfig {
+        minSdk = 23
+    }
+
+    buildFeatures {
+        compose = true
+    }
 }
 
 dependencies {
     implementation(project(":parser"))
     implementation(project(":storage"))
     implementation(project(":integrations"))
-    implementation(project(":navigation"))
-}
 
-kotlin {
-    jvmToolchain(21)
+    implementation(platform("androidx.compose:compose-bom:2025.10.00"))
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.runtime:runtime")
+    implementation("androidx.compose.ui:ui")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }

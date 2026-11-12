@@ -1,5 +1,5 @@
 
-package your.package.integrations
+package textforge.integrations
 
 import android.content.Context
 import android.net.Uri
@@ -10,7 +10,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
-import your.package.storage.NovelStore
+import textforge.storage.NovelStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

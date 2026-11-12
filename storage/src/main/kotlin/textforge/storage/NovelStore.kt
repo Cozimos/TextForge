@@ -1,11 +1,12 @@
-package your.package.storage
+package textforge.storage
 
 import android.content.Context
 import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
-import your.package.parser.ChapterIndexer
-import your.package.parser.NovelParser
+import textforge.parser.NovelBlock
+import textforge.parser.ChapterIndexer
+import textforge.parser.NovelParser
 import java.io.File
 import java.util.UUID
 
@@ -86,7 +87,15 @@ object NovelStore {
 
                         is NovelBlock.Paragraph -> JSONObject().apply {
                             put("type", "paragraph")
-                            put("text", block.text)
+                            put("segments", JSONArray().apply {
+    block.segments.forEach { segment ->
+        put(JSONObject().apply {
+            put("text", segment.text)
+            put("highlighted", segment.highlighted)
+            put("italic", segment.italic)
+        })
+    }
+})
                             put("fullHighlight", block.fullHighlight)
                         }
                     }

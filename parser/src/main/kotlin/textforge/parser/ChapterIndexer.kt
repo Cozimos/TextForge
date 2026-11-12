@@ -1,6 +1,5 @@
-package your.package.parser
+package textforge.parser
 
-import your.package.storage.ChapterIndex
 
 object ChapterIndexer {
 

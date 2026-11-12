@@ -1,3 +1,5 @@
+package textforge.ui.components
+
 @Composable
 fun HeadingComponent(
     title: String,

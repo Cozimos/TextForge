@@ -15,7 +15,7 @@ TextForge/
 │   └── NovelParser.kt
 ├── storage/
 │   ├── NovelStore.kt
-│   └── NovelsModel.txt
+│   └── NovelsModel.kt
 ├── ui/
 │   ├── components/
 │   │   ├── HeadingComponent.kt
