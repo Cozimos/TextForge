@@ -15,6 +15,10 @@ import kotlinx.coroutines.flow.map
 import textforge.storage.NovelStore
 import textforge.storage.ReadingProgress
 import org.json.JSONArray
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 
 @Composable
 fun ReaderScreen(novelId: String) {
@@ -81,7 +85,7 @@ fun ReaderScreen(novelId: String) {
     }
 }
 
-@Optin(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderScreen(
     novel: NovelItem,
