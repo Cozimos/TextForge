@@ -6,6 +6,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import textforge.parser.NovelBlock
 import textforge.parser.ChapterIndexer
+import textforge.parser.ChapterIndex
 import textforge.parser.NovelParser
 import java.io.File
 import java.util.UUID
