@@ -3,11 +3,10 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":core"))
-    implementation(project(":reader"))
-    implementation(project(":navigation"))
-    implementation(project(":processing"))
+    implementation(project(":parser"))
+    implementation(project(":storage"))
     implementation(project(":integrations"))
+    implementation(project(":navigation"))
 }
 
 kotlin {
