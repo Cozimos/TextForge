@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "textforge"
+    namespace = "textforge.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "textforge"
+        applicationId = "textforge.app"
         minSdk = 23
         targetSdk = 36
         versionCode = 1
