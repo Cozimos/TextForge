@@ -179,7 +179,7 @@ fun ReaderScreen(
                     .pointerInput(currentChapter, currentPage, pages.size) {
                         detectTapGestures { offset ->
                             when {
-                                offset.x < size.width * 0.3.5f -> {
+                                offset.x < size.width * 0.35f -> {
                                     if (currentPage > 0) {
                                         currentPage--
                                     } else if (currentChapter > 0) {
@@ -187,7 +187,7 @@ fun ReaderScreen(
                                     }
                                 }
 
-                                offset.x > size.width * 0.7.5f -> {
+                                offset.x > size.width * 0.75f -> {
                                     if (currentPage < pages.lastIndex) {
                                         currentPage++
                                     } else if (currentChapter < lastChapter) {
