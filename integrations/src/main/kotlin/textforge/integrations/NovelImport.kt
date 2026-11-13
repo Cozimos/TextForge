@@ -1,39 +1,48 @@
 
 package textforge.integrations
 
-import android.content.Context
 import android.net.Uri
-import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
-import textforge.storage.NovelStore
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import textforge.storage.NovelStore
 
 @Composable
 fun NovelFilePicker(
-    onImported: () -> Unit
+    onImported: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
 
-        context.contentResolver.takePersistableUriPermission(
-            uri,
-            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-        )
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
 
-        CoroutineScope(Dispatchers.IO).launch {
-            NovelStore.importNovel(context, uri)
-            onImported()
+        scope.launch {
+            val id = withContext(Dispatchers.IO) {
+                runCatching { NovelStore.importNovel(context, uri) }.getOrNull()
+            }
+            if (id != null) {
+                onImported(id)
+            } else {
+                Toast.makeText(context, "Import failed", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

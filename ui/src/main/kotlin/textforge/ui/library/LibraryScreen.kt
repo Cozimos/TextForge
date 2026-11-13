@@ -34,8 +34,9 @@ fun LibraryScreen(
     }
 
     Column(Modifier.fillMaxSize().background(NovelColors.Background).systemBarsPadding().padding(16.dp)) {
-        NovelFilePicker {
+        NovelFilePicker { id ->
             refresh()
+            onOpenNovel(id)
         }
 
         LazyColumn {
