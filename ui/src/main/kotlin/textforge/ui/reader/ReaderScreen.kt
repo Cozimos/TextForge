@@ -162,7 +162,6 @@ fun ReaderScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 fun ReaderScreen(
     novel: NovelItem,
     document: NovelDocument,
