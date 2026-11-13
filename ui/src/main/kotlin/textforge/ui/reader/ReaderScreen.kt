@@ -21,7 +21,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.roundToPx
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -41,10 +40,33 @@ fun ReaderScreen(
 
     // Immersive reader: hide status bar, keep navigation bar.
     DisposableEffect(activity, view) {
-        val window = activity?.window
+    val window = activity?.window
+    val oldNavigationBarColor = window?.navigationBarColor
 
+    if (window != null) {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        val controller = WindowInsetsControllerCompat(window, view)
+        controller.hide(WindowInsetsCompat.Type.statusBars())
+        controller.show(WindowInsetsCompat.Type.navigationBars())
+
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        controller.isAppearanceLightNavigationBars = false
+    }
+
+    onDispose {
         if (window != null) {
-            val oldNavigationBarColor = window.navigationBarColor
+            val controller = WindowInsetsControllerCompat(window, view)
+            controller.show(WindowInsetsCompat.Type.statusBars())
+
+            WindowCompat.setDecorFitsSystemWindows(window, true)
+
+            oldNavigationBarColor?.let {
+                window.navigationBarColor = it
+            }
+        }
+    }
+}
 
             WindowCompat.setDecorFitsSystemWindows(window, false)
 
@@ -133,7 +155,7 @@ fun ReaderScreen(
                 .systemBarsPadding()
         ) {
             val density = LocalDensity.current
-            val pageTextStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp,lineHeight = 29.sp
+            val pageTextStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 28.sp,lineHeight = 29.sp
             )
 
             val widthPx = with(density) {
