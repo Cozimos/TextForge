@@ -40,8 +40,7 @@ Handles Android document access, file selection, URI permissions, and novel impo
 
 ### parser
 Reads Markdown content, identifies chapter boundaries, calculates UTF-8 byte offsets, and parses novel formatting into structured data.
-
-### storage
+                 ### storage
 Manages imported novel metadata, chapter indexes, parsed chapter cache, table of contents, and reading progress.
 
 ### navigation
@@ -85,6 +84,11 @@ NovelStore.kt
        ┌─────┴─────┐
        ▼           ▼
     Library      Reader
+READING DIRECTION →
+
+  [ -2 ] [ -1 ] [ CURRENT ] [ +1 ] [ +2 ] [ +3 ] [ +4 ] [ +5 ]
+     └──── backward ────┘       └──── forward ─────────────┘
+
 ```
 
 ## Storage

@@ -10,8 +10,29 @@ import textforge.parser.ChapterIndex
 import textforge.parser.NovelParser
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.Executors
 
 object NovelStore {
+    private const val MAX_CACHE_CHAPTERS = 8
+    private const val MAX_MEMORY_BYTES = 16L * 1024 * 1024
+
+    private data class CachedChapter(
+    val novelId: String,
+    val chapter: Int,
+    val blocks: JSONArray,
+    val estimatedBytes: Long
+    )
+
+    private val cacheLock = Any()
+    private val memoryCache = mutableListOf<CachedChapter>()
+    private val pendingLoads = mutableListOf<Pair<String, Int>>()
+    private val prefetchExecutor = Executors.newFixedThreadPool(2)
+
+    private var activeNovelId: String? = null
+    private var windowStart = 0
+    private var windowEnd = -1
+    private var currentChapter = 0
+    private var memoryBytes = 0L
 
     private fun root(context: Context) =
         File(context.filesDir, "novels").apply { mkdirs() }
@@ -151,17 +172,192 @@ object NovelStore {
     }
 
     fun getChapterCache(
-        context: Context,
-        id: String,
-        chapter: Int
+    context: Context,
+    id: String,
+    chapter: Int
     ): JSONArray {
-        val file = File(
-            folder(context, id),
-            "chapters/%03d.json".format(chapter)
-        )
-        return JSONObject(file.readText()).getJSONArray("blocks")
+    synchronized(cacheLock) {
+        memoryCache.firstOrNull {
+            it.novelId == id && it.chapter == chapter
+        }?.let {
+            return it.blocks
+        }
+
+        if (activeNovelId != id) {
+            memoryCache.clear()
+            memoryBytes = 0L
+            activeNovelId = id
+            windowStart = chapter
+            windowEnd = chapter
+            currentChapter = chapter
+        }
     }
 
+    val file = File(
+        folder(context, id),
+        "chapters/%03d.json".format(chapter)
+    )
+
+    val blocks = JSONObject(file.readText()).getJSONArray("blocks")
+
+    synchronized(cacheLock) {
+        val existing = memoryCache.firstOrNull {
+            it.novelId == id && it.chapter == chapter
+        }
+
+        if (existing != null) return existing.blocks
+
+        if (activeNovelId == id &&
+            chapter in windowStart..windowEnd
+        ) {
+            addToMemoryCache(id, chapter, blocks, file.length())
+        }
+    }
+
+    return blocks
+}
+    private fun addToMemoryCache(
+    id: String,
+    chapter: Int,
+    blocks: JSONArray,
+    fileBytes: Long
+) {
+    val estimatedBytes = fileBytes * 3L
+
+    if (estimatedBytes > MAX_MEMORY_BYTES) return
+
+    memoryCache.removeAll {
+        it.novelId == id && it.chapter == chapter
+    }
+
+    memoryBytes = memoryCache.sumOf { it.estimatedBytes }
+
+    memoryCache.add(
+        CachedChapter(id, chapter, blocks, estimatedBytes)
+    )
+
+    memoryBytes += estimatedBytes
+
+    while (
+        memoryCache.size > MAX_CACHE_CHAPTERS ||
+        memoryBytes > MAX_MEMORY_BYTES
+    ) {
+        val farthest = memoryCache.maxByOrNull {
+            kotlin.math.abs(it.chapter - currentChapter)
+        } ?: break
+
+        memoryCache.remove(farthest)
+        memoryBytes -= farthest.estimatedBytes
+    }
+}
+
+fun updateChapterWindow(
+    context: Context,
+    id: String,
+    current: Int,
+    chapterCount: Int,
+    backward: Int = 2,
+    forward: Int = 5
+) {
+    if (chapterCount <= 0) return
+
+    val chapter = current.coerceIn(0, chapterCount - 1)
+
+    synchronized(cacheLock) {
+        if (activeNovelId != id) {
+            memoryCache.clear()
+            memoryBytes = 0L
+            activeNovelId = id
+            windowStart = maxOf(0, chapter - backward)
+            windowEnd = minOf(chapterCount - 1, chapter + forward)
+        } else if (
+            chapter < windowStart ||
+            chapter > windowEnd ||
+            chapter < currentChapter
+        ) {
+            windowStart = maxOf(0, chapter - backward)
+            windowEnd = minOf(chapterCount - 1, chapter + forward)
+        } else {
+            windowStart = maxOf(0, chapter - backward)
+
+            if (chapter >= windowEnd - 2) {
+                windowEnd = minOf(
+                    chapterCount - 1,
+                    chapter + forward
+                )
+            }
+        }
+
+        currentChapter = chapter
+
+        val iterator = memoryCache.iterator()
+
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+
+            if (
+                entry.novelId != id ||
+                entry.chapter !in windowStart..windowEnd
+            ) {
+                memoryBytes -= entry.estimatedBytes
+                iterator.remove()
+            }
+        }
+    }
+
+    val appContext = context.applicationContext
+
+    for (target in windowStart..windowEnd) {
+        val shouldLoad = synchronized(cacheLock) {
+            val cached = memoryCache.any {
+                it.novelId == id && it.chapter == target
+            }
+
+            val pending = id to target
+
+            if (cached || pending in pendingLoads) {
+                false
+            } else {
+                pendingLoads.add(pending)
+                true
+            }
+        }
+
+        if (!shouldLoad) continue
+
+        prefetchExecutor.execute {
+            try {
+                val file = File(
+                    folder(appContext, id),
+                    "chapters/%03d.json".format(target)
+                )
+
+                if (file.exists()) {
+                    val blocks = JSONObject(file.readText())
+                        .getJSONArray("blocks")
+
+                    synchronized(cacheLock) {
+                        if (
+                            activeNovelId == id &&
+                            target in windowStart..windowEnd
+                        ) {
+                            addToMemoryCache(
+                                id,
+                                target,
+                                blocks,
+                                file.length()
+                            )
+                        }
+                    }
+                }
+            } finally {
+                synchronized(cacheLock) {
+                    pendingLoads.remove(id to target)
+                }
+            }
+        }
+    }
+}
     fun saveProgress(
         context: Context,
         id: String,

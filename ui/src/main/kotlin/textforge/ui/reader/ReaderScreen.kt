@@ -22,9 +22,17 @@ import androidx.compose.material3.TextButton
 import textforge.ui.library.NovelItem
 import textforge.parser.NovelDocument
 import textforge.parser.NovelBlock
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.withStyle
 
 @Composable
-fun ReaderScreen(novelId: String) {
+fun ReaderScreen(
+    novelId: String,
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
 
     val chapters = remember(novelId) {
@@ -35,13 +43,17 @@ fun ReaderScreen(novelId: String) {
         NovelStore.getProgress(context, novelId)
     }
 
-    val chapterNumber = progress.chapterNumber.coerceIn(
-        0, (chapters.size - 1).coerceAtLeast(0)
+    val initialChapter = progress.chapterNumber.coerceIn(
+    0, (chapters.size - 1).coerceAtLeast(0)
     )
 
-    val blocks = remember(novelId, chapterNumber) {
-        NovelStore.getChapterCache(context, novelId, chapterNumber)
+    var currentChapter by remember(novelId) {
+    mutableIntStateOf(initialChapter)
     }
+
+    val blocks = remember(novelId, currentChapter) {
+    NovelStore.getChapterCache(context, novelId, currentChapter)
+} 
 
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = progress.blockIndex.coerceIn(
@@ -49,27 +61,31 @@ fun ReaderScreen(novelId: String) {
         )
     )
 
-    LaunchedEffect(listState, novelId, chapterNumber) {
-        snapshotFlow { listState.firstVisibleItemIndex }
-            .distinctUntilChanged()
-            .collect { blockIndex ->
-                NovelStore.saveProgress(
-                    context,
-                    novelId,
-                    ReadingProgress(
-                        chapterNumber = chapterNumber,
-                        blockIndex = blockIndex,
-                        byteOffset = chapters[chapterNumber].startByte
-                    )
+    LaunchedEffect(listState, novelId, currentChapter) {
+    NovelStore.updateChapterWindow(
+        context = context,
+        id = novelId,
+        current = currentChapter,
+        chapterCount = chapters.size
+    )
+
+    snapshotFlow { listState.firstVisibleItemIndex }
+        .distinctUntilChanged()
+        .collect { blockIndex ->
+            NovelStore.saveProgress(
+                context,
+                novelId,
+                ReadingProgress(
+                    chapterNumber = currentChapter,
+                    blockIndex = blockIndex,
+                    byteOffset = chapters[currentChapter].startByte
                 )
-            }
+            )
+        }
     }
+}
     
-    @Composable
-fun ReaderScreen(
-    novelId: String,
-    onBack: () -> Unit
-    ) {
+    
     Column(modifier = Modifier.fillMaxSize()) {
     TextButton(onClick = onBack) {
         Text("← Library")
@@ -77,7 +93,7 @@ fun ReaderScreen(
 
     LazyColumn(
         state = listState,
-        modifier = Modifier.Modifier.weight(1f),
+        modifier = Modifier.weight(1f),
         contentPadding = PaddingValues(16.dp)
     ) {
         itemsIndexed(
@@ -90,22 +106,49 @@ fun ReaderScreen(
                 )
 
                 "paragraph" -> Text(
-                    text = block.getString("text"),
-                    modifier = Modifier.padding(vertical = 8.dp)
+    text = buildAnnotatedString {
+        val segments = block.getJSONArray("segments")
+        val fullHighlight = block.optBoolean("fullHighlight", false)
+
+        for (i in 0 until segments.length()) {
+            val segment = segments.getJSONObject(i)
+
+            withStyle(
+                SpanStyle(
+                    fontStyle = if (segment.getBoolean("italic")) {
+                        FontStyle.Italic
+                    } else {
+                        FontStyle.Normal
+                    },
+                    background = if (
+                        segment.getBoolean("highlighted") || fullHighlight
+                    ) {
+                        Color.Yellow
+                    } else {
+                        Color.Unspecified
+                    }
+                )
+            ) {
+                append(segment.getString("text"))
+            }
+        }
+    },
+    modifier = Modifier.padding(vertical = 8.dp)
                 )
             }
         }
     }
 }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
+
 @Composable
 fun ReaderScreen(
     novel: NovelItem,
     document: NovelDocument,
     onBack: () -> Unit
 ) {
-
     var showMenu by remember { mutableStateOf(false) }
     var showTOC by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
