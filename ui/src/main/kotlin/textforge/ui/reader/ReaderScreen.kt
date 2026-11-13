@@ -3,7 +3,7 @@ package textforge.ui.reader
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.lazy.LazyListState
+
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,13 +26,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.distinctUntilChanged
+
 import kotlinx.coroutines.flow.map
 import textforge.storage.NovelStore
 import textforge.storage.ReadingProgress
@@ -49,6 +49,16 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.withStyle
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.roundToPx
+import android.app.Activity
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,12 +75,31 @@ fun ReaderScreen(
     var currentChapter by remember(novelId) {
         mutableIntStateOf(progress.chapterNumber.coerceIn(0, lastChapter))
     }
-    var restoring by remember(novelId) { mutableStateOf(true) }
+    var currentPage by remember(novelId) {
+    mutableIntStateOf(0)
+}
+    val window = (view.context as Activity).window
 
+    WindowCompat.setDecorFitsSystemWindows(window, false)
+
+    val controller = WindowInsetsControllerCompat(window, view)
+
+    controller.hide(WindowInsetsCompat.Type.statusBars())
+    controller.show(WindowInsetsCompat.Type.navigationBars())
+
+    window.navigationBarColor = android.graphics.Color.TRANSPARENT
+
+    controller.isAppearanceLightNavigationBars = false
+    
     var showBars by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showTOC by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
+    val tocPageSize = 12
+    
+    var tocPage by remember(novelId) {
+    mutableIntStateOf(0)
+    }
     var showReplace by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
     var replaceText by remember { mutableStateOf("") }
@@ -87,10 +116,11 @@ fun ReaderScreen(
     }
 
     fun goTo(chapter: Int) {
-        val target = chapter.coerceIn(0, lastChapter)
-        if (target != currentChapter) {
-            restoring = false
-            currentChapter = target
+    val target = chapter.coerceIn(0, lastChapter)
+
+    if (target != currentChapter) {
+        currentChapter = target
+        currentPage = 0
         }
     }
 
@@ -122,51 +152,90 @@ fun ReaderScreen(
             .fillMaxSize()
             .background(NovelColors.Background)
     ) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .systemBarsPadding()
-                .pointerInput(currentChapter) {
-                    detectTapGestures { offset ->
-                        val w = size.width
-                        when {
-                            offset.x < w * 0.3f -> goTo(currentChapter - 1)
-                            offset.x > w * 0.7f -> goTo(currentChapter + 1)
-                            else -> showBars = !showBars
-                        }
-                    }
-                },
-            contentPadding = PaddingValues(16.dp)
-        ) {
-            itemsIndexed(items) { _, block ->
-                when (block.getString("type")) {
-                    "heading" -> Text(
-                        text = block.getString("title"),
-                        modifier = Modifier.padding(vertical = 12.dp)
-                    )
+        BoxWithConstraints(
+    modifier = Modifier
+        .fillMaxSize()
+        .systemBarsPadding()
+) {
+    val density = LocalDensity.current
+    val pageTextStyle = MaterialTheme.typography.bodyLarge
 
-                    "paragraph" -> Text(
-                        text = buildAnnotatedString {
-                            val segments = block.getJSONArray("segments")
-                            val fullHighlight = block.optBoolean("fullHighlight", false)
-                            for (i in 0 until segments.length()) {
-                                val segment = segments.getJSONObject(i)
-                                withStyle(
-                                    SpanStyle(
-                                        fontStyle = if (segment.getBoolean("italic")) FontStyle.Italic else FontStyle.Normal,
-                                        background = if (segment.getBoolean("highlighted") || fullHighlight) Color.Yellow else Color.Unspecified
-                                    )
-                                ) {
-                                    append(segment.getString("text"))
-                                }
+    val widthPx = with(density) {
+        (maxWidth - 32.dp).roundToPx()
+    }
+
+    val heightPx = with(density) {
+        (maxHeight - 32.dp).roundToPx()
+    }
+
+    val pages = rememberReaderPages(
+        blocks = blocks,
+        widthPx = widthPx.coerceAtLeast(1),
+        heightPx = heightPx.coerceAtLeast(1),
+        density = density,
+        style = pageTextStyle
+    )
+
+    LaunchedEffect(currentChapter, pages.size) {
+        currentPage = currentPage.coerceIn(
+            0,
+            pages.lastIndex.coerceAtLeast(0)
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(currentChapter, currentPage, pages.size) {
+                detectTapGestures { offset ->
+                    when {
+                        offset.x < size.width * 0.3f -> {
+                            if (currentPage > 0) {
+                                currentPage--
+                            } else if (currentChapter > 0) {
+                                goTo(currentChapter - 1)
                             }
-                        },
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
+                        }
+
+                        offset.x > size.width * 0.7f -> {
+                            if (currentPage < pages.lastIndex) {
+                                currentPage++
+                            } else if (currentChapter < lastChapter) {
+                                goTo(currentChapter + 1)
+                            }
+                        }
+
+                        else -> showBars = !showBars
+                    }
                 }
             }
+            .padding(16.dp)
+    ) {
+        pages.getOrNull(currentPage)?.forEach { pageBlock ->
+
+    when {
+        pageBlock.heading -> {
+            Text(
+                text = pageBlock.text,
+                style = pageTextStyle,
+                modifier = Modifier.padding(vertical = 12.dp)
+            )
         }
+
+        pageBlock.fullHighlight -> {
+            textforge.ui.components.HighlightedParagraph(
+                text = pageBlock.text
+            )
+        }
+
+        else -> {
+            textforge.ui.components.InlineHighlight(
+                text = pageBlock.text,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        }
+    }
+}
 
         AnimatedVisibility(
             visible = showBars,
@@ -249,22 +318,92 @@ fun ReaderScreen(
     }
 
     if (showTOC) {
-        AlertDialog(
-            onDismissRequest = { showTOC = false },
-            containerColor = NovelColors.MenuBackground,
-            title = { Text("Table of Contents") },
-            text = {
-                LazyColumn {
-                    itemsIndexed(chapters) { index, chapter ->
-                        TextButton(onClick = { goTo(index); showTOC = false }) {
-                            Text(chapter.title)
+    AlertDialog(
+        onDismissRequest = { showTOC = false },
+        containerColor = NovelColors.MenuBackground,
+        title = {
+            Text("Table of Contents")
+        },
+        text = {
+            Column {
+
+                val tocPageCount =
+                    (chapters.size + tocPageSize - 1) / tocPageSize
+
+                val start = tocPage * tocPageSize
+                val end = minOf(start + tocPageSize, chapters.size)
+
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 600.dp)
+                ) {
+                    itemsIndexed(chapters.subList(start, end)) { index, chapter ->
+                        val chapterIndex = start + index
+
+                        TextButton(
+                            onClick = {
+                                goTo(chapterIndex)
+                                showTOC = false
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(36.dp),
+                            contentPadding = PaddingValues(
+                                horizontal = 8.dp,
+                                vertical = 0.dp
+                            )
+                        ) {
+                            Text(
+                                chapter.title,
+                                color = if (chapterIndex == currentChapter) {
+                                    Color(0xFFFFCC80)
+                                } else {
+                                    Color.White
+                                },
+                                fontWeight = if (chapterIndex == currentChapter) {
+                                    FontWeight.Bold
+                                } else {
+                                    FontWeight.Normal
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
                 }
-            },
-            confirmButton = { TextButton(onClick = { showTOC = false }) { Text("Close") } }
-        )
-    }
+
+                Spacer(Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        enabled = tocPage > 0,
+                        onClick = { tocPage-- }
+                    ) {
+                        Text("<")
+                    }
+
+                    Text(
+                        "${tocPage + 1} / ${tocPageCount.coerceAtLeast(1)}"
+                    )
+
+                    TextButton(
+                        enabled = tocPage < tocPageCount - 1,
+                        onClick = { tocPage++ }
+                    ) {
+                        Text(">")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { showTOC = false }) {
+                Text("Close")
+            }
+        }
+    )
+}
 
     if (showSearch) {
         AlertDialog(

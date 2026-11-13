@@ -13,7 +13,7 @@ import java.util.UUID
 import java.util.concurrent.Executors
 
 object NovelStore {
-    private const val MAX_CACHE_CHAPTERS = 8
+    private const val MAX_CACHE_CHAPTERS = 4
     private const val MAX_MEMORY_BYTES = 16L * 1024 * 1024
 
     private data class CachedChapter(
@@ -75,13 +75,14 @@ object NovelStore {
         return id
     }
 
+    private val buildLock = Any()
+
     fun buildCache(context: Context, id: String) {
         val dir = folder(context, id)
         val bytes = File(dir, "source.md").readBytes()
         val chapters = ChapterIndexer.index(bytes)
 
         val indexJson = JSONArray()
-
         chapters.forEach { chapter ->
             indexJson.put(
                 JSONObject().apply {
@@ -91,16 +92,33 @@ object NovelStore {
                     put("endByte", chapter.endByte)
                 }
             )
+        }
 
-            val chapterBytes = bytes.copyOfRange(
-                chapter.startByte.toInt(),
-                chapter.endByte.toInt()
-            )
+        JSONObject().put("chapters", indexJson)
+            .write(File(dir, "index.json"))
 
-            val document = NovelParser.parse(
-                chapterBytes.toString(Charsets.UTF_8)
-            )
+        saveProgress(
+            context,
+            id,
+            ReadingProgress(0, 0, chapters.firstOrNull()?.startByte ?: 0L)
+        )
+    }
 
+    private fun ensureChapter(context: Context, id: String, chapter: Int): File {
+        val dir = folder(context, id)
+        val file = File(dir, "chapters/%03d.json".format(chapter))
+
+        synchronized(buildLock) {
+            if (file.exists()) return file
+
+            val meta = getChapters(context, id).first { it.number == chapter }
+            val chapterBytes = ByteArray((meta.endByte - meta.startByte).toInt())
+            java.io.RandomAccessFile(File(dir, "source.md"), "r").use {
+                it.seek(meta.startByte)
+                it.readFully(chapterBytes)
+            }
+
+            val document = NovelParser.parse(chapterBytes.toString(Charsets.UTF_8))
             val blocksJson = JSONArray()
 
             document.blocks.forEach { block ->
@@ -115,33 +133,26 @@ object NovelStore {
                         is NovelBlock.Paragraph -> JSONObject().apply {
                             put("type", "paragraph")
                             put("segments", JSONArray().apply {
-    block.segments.forEach { segment ->
-        put(JSONObject().apply {
-            put("text", segment.text)
-            put("highlighted", segment.highlighted)
-            put("italic", segment.italic)
-        })
-    }
-})
+                                block.segments.forEach { segment ->
+                                    put(JSONObject().apply {
+                                        put("text", segment.text)
+                                        put("highlighted", segment.highlighted)
+                                        put("italic", segment.italic)
+                                    })
+                                }
+                            })
                             put("fullHighlight", block.fullHighlight)
                         }
                     }
                 )
             }
 
-            val chapterDir = File(dir, "chapters").apply { mkdirs() }
-            JSONObject().put("blocks", blocksJson)
-                .write(File(chapterDir, "%03d.json".format(chapter.number)))
+            file.parentFile?.mkdirs()
+            val tmp = File(file.path + ".tmp")
+            JSONObject().put("blocks", blocksJson).write(tmp)
+            tmp.renameTo(file)
         }
-
-        JSONObject().put("chapters", indexJson)
-            .write(File(dir, "index.json"))
-
-        saveProgress(
-            context,
-            id,
-            ReadingProgress(0, 0, chapters.firstOrNull()?.startByte ?: 0L)
-        )
+        return file
     }
 
     fun getLibrary(context: Context): List<NovelMetadata> {
@@ -199,10 +210,7 @@ object NovelStore {
         }
     }
 
-    val file = File(
-        folder(context, id),
-        "chapters/%03d.json".format(chapter)
-    )
+    val file = ensureChapter(context, id, chapter)
 
     val blocks = JSONObject(file.readText()).getJSONArray("blocks")
 
@@ -262,8 +270,8 @@ fun updateChapterWindow(
     id: String,
     current: Int,
     chapterCount: Int,
-    backward: Int = 2,
-    forward: Int = 5
+    backward: Int = 1,
+    forward: Int = 2
 ) {
     if (chapterCount <= 0) return
 
@@ -333,12 +341,9 @@ fun updateChapterWindow(
 
         prefetchExecutor.execute {
             try {
-                val file = File(
-                    folder(appContext, id),
-                    "chapters/%03d.json".format(target)
-                )
+                val file = ensureChapter(appContext, id, target)
 
-                if (file.exists()) {
+                run {
                     val blocks = JSONObject(file.readText())
                         .getJSONArray("blocks")
 
@@ -356,6 +361,7 @@ fun updateChapterWindow(
                         }
                     }
                 }
+            } catch (_: Throwable) {
             } finally {
                 synchronized(cacheLock) {
                     pendingLoads.remove(id to target)

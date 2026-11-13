@@ -44,7 +44,7 @@ fun NovelTextRenderer(
                                 background = if (
                                     segment.highlighted &&
                                     !block.fullHighlight
-                                ) Color(0xFFDCEEFF)
+) Color(0xFFD5EEE9)
                                 else Color.Transparent,
 
                                 fontStyle = if (segment.italic)

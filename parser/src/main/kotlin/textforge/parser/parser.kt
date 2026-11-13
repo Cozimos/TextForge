@@ -154,106 +154,92 @@ object NovelMarkdownParser {
         )
     }
 
+    private fun findItalicEnd(source: String, open: Int): Int {
+        var j = open + 2
+        while (j < source.length) {
+            if (source[j] == '\'') {
+                val before = source[j - 1]
+                val after = source.getOrNull(j + 1)
+                if (!before.isWhitespace() && (after == null || !after.isLetterOrDigit())) {
+                    return j
+                }
+            }
+            j++
+        }
+        return -1
+    }
+
     private fun parseSegments(
         text: String,
         highlighted: Boolean = false
     ): List<Segment> {
 
         val result = mutableListOf<Segment>()
+        val buf = StringBuilder()
+        var curHighlight = highlighted
+        var curItalic = false
 
-        fun add(
-            value: String,
-            highlight: Boolean,
-            italic: Boolean
-        ) {
-            if (value.isEmpty()) return
-
-            val previous = result.lastOrNull()
-
-            if (
-                previous != null &&
-                previous.highlighted == highlight &&
-                previous.italic == italic
-            ) {
-                result[result.lastIndex] = previous.copy(
-                    text = previous.text + value
-                )
-            } else {
-                result.add(
-                    Segment(
-                        text = value,
-                        highlighted = highlight,
-                        italic = italic
-                    )
-                )
+        fun flush() {
+            if (buf.isNotEmpty()) {
+                result.add(Segment(buf.toString(), curHighlight, curItalic))
+                buf.setLength(0)
             }
         }
 
-        fun parseRange(
-            source: String,
-            highlight: Boolean,
-            italic: Boolean
-        ) {
+        fun add(value: Char, highlight: Boolean, italic: Boolean) {
+            if (highlight != curHighlight || italic != curItalic) {
+                flush()
+                curHighlight = highlight
+                curItalic = italic
+            }
+            buf.append(value)
+        }
 
+        fun parseRange(source: String, highlight: Boolean, italic: Boolean) {
             var i = 0
 
             while (i < source.length) {
 
-                // Inline highlight
                 if (source[i] == '[') {
-
                     val end = source.indexOf(']', i + 1)
-
                     if (end != -1) {
-
-                        val inner = source.substring(i + 1, end)
-
                         parseRange(
-                            inner,
+                            source.substring(i + 1, end),
                             highlight = true,
                             italic = italic
                         )
-
                         i = end + 1
                         continue
                     }
                 }
 
-                // Italic
                 if (source[i] == '\'') {
+                    val prev = if (i > 0) source[i - 1] else null
+                    val next = source.getOrNull(i + 1)
+                    val canOpen = (prev == null || !prev.isLetterOrDigit()) &&
+                        next != null && !next.isWhitespace()
 
-                    val end = source.indexOf('\'', i + 1)
-
-                    if (end != -1) {
-
-                        val inner = source.substring(i + 1, end)
-
-                        parseRange(
-                            inner,
-                            highlight = highlight,
-                            italic = true
-                        )
-
-                        i = end + 1
-                        continue
+                    if (canOpen) {
+                        val end = findItalicEnd(source, i)
+                        if (end != -1) {
+                            parseRange(
+                                source.substring(i + 1, end),
+                                highlight = highlight,
+                                italic = true
+                            )
+                            i = end + 1
+                            continue
+                        }
                     }
                 }
 
-                add(
-                    source[i].toString(),
-                    highlight,
-                    italic
-                )
-
+                add(source[i], highlight, italic)
                 i++
             }
         }
 
-        parseRange(
-            text,
-            highlight = highlighted,
-            italic = false
-        )
+        parseRange(text, highlight = highlighted, italic = false)
+        flush()
 
         return result
     }
