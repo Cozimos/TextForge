@@ -68,7 +68,7 @@ fun ReaderScreen(
     }
 }
 
-            WindowCompat.setDecorFitsSystemWindows(window, false)
+            
 
             val controller = WindowInsetsControllerCompat(window, view)
             controller.hide(WindowInsetsCompat.Type.statusBars())

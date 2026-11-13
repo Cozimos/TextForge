@@ -1,7 +1,7 @@
 
 package textforge.ui.library
 import androidx.compose.foundation.background
-
+import textforge.ui.NovelColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
