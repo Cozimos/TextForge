@@ -67,29 +67,8 @@ fun ReaderScreen(
         }
     }
 }
-
-            
-
-            val controller = WindowInsetsControllerCompat(window, view)
-            controller.hide(WindowInsetsCompat.Type.statusBars())
-            controller.show(WindowInsetsCompat.Type.navigationBars())
-
-            window.navigationBarColor = android.graphics.Color.TRANSPARENT
-            controller.isAppearanceLightNavigationBars = false
-        }
-
-        onDispose {
-            if (window != null) {
-                val controller = WindowInsetsControllerCompat(window, view)
-                controller.show(WindowInsetsCompat.Type.statusBars())
-                WindowCompat.setDecorFitsSystemWindows(window, true)
-                window.navigationBarColor = oldNavigationBarColor
-            }
-        }
-    }
-
     val chapters = remember(novelId) {
-        NovelStore.getChapters(context, novelId)
+    NovelStore.getChapters(context, novelId)
     }
 
     val lastChapter = (chapters.size - 1).coerceAtLeast(0)
