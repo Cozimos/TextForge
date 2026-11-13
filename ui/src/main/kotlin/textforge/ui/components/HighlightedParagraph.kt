@@ -10,11 +10,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 
 @Composable
 fun HighlightedParagraph(
+    onTextPositioned: (LayoutCoordinates) -> Unit = {},
     text: AnnotatedString,
-    modifier: Modifier = Modifier
+    modifier = Modifier
+    .padding(4.dp)
+    .onGloballyPositioned(onTextPositioned),
+    onTextLayout: (TextLayoutResult) -> Unit = {}
 ) {
 
     Surface(
@@ -25,12 +32,13 @@ fun HighlightedParagraph(
         shape = RoundedCornerShape(3.dp)
     ) {
 
-        Text(
-            text = text,
-            modifier = Modifier.padding(4.dp),
-            color = Color(0xFF252525),
-            fontSize = 17.sp,
-            lineHeight = 29.sp
+    Text(
+    text = text,
+    modifier = Modifier.padding(4.dp),
+    color = Color(0xFF252525),
+    fontSize = 17.sp,
+    lineHeight = 29.sp,
+    onTextLayout = onTextLayout
         )
     }
 }

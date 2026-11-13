@@ -16,10 +16,15 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+
 @Composable
 fun InlineHighlight(
+    onTextPositioned: (LayoutCoordinates) -> Unit = {},
+    onTextLayout: (TextLayoutResult) -> Unit = {},
     text: AnnotatedString,
-    modifier: Modifier = Modifier,
+    modifier = modifier.onGloballyPositioned(onTextPositioned).drawBehind {,
     fontSize: TextUnit = 18.sp,
     lineHeight: TextUnit = 17.sp
 ) {
@@ -85,7 +90,9 @@ fun InlineHighlight(
         lineHeight = lineHeight,
         color = Color(0xFF252525),
         onTextLayout = {
-            layoutResult = it
+        layoutResult = it
+        onTextLayout(it)
+            }
         }
     )
 }

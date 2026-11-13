@@ -28,6 +28,12 @@ import textforge.storage.NovelStore
 import textforge.ui.NovelColors
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.geometry.Offset
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,17 +74,33 @@ fun ReaderScreen(
         }
     }
 }
-    val chapters = remember(novelId) {
-    NovelStore.getChapters(context, novelId)
+    var chapters by remember(novelId) {
+    mutableStateOf<List<ChapterIndex>>(emptyList())
+    }
+
+    LaunchedEffect(novelId) {
+    chapters = withContext(Dispatchers.IO) {
+        NovelStore.getChapters(context, novelId)
+        }
     }
 
     val lastChapter = (chapters.size - 1).coerceAtLeast(0)
 
     var currentChapter by remember(novelId) {
-        mutableIntStateOf(
+    mutableIntStateOf(0)
+    }
+
+    LaunchedEffect(novelId, chapters) {
+    if (chapters.isNotEmpty()) {
+    val progress = withContext(Dispatchers.IO) {
             NovelStore.getProgress(context, novelId)
-                .chapterNumber.coerceIn(0, lastChapter)
-        )
+        }
+
+        currentChapter = progress.chapterNumber.coerceIn(
+            0,
+            chapters.lastIndex
+            )
+        }
     }
 
     var currentPage by remember(novelId) {
@@ -90,7 +112,19 @@ fun ReaderScreen(
     var showTOC by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
     var showReplace by remember { mutableStateOf(false) }
+    var selectedWord by remember { mutableStateOf<String?>(null) }
 
+    val textLayouts = remember {
+    mutableStateMapOf<Int, TextLayoutResult>()
+    }
+
+    val textCoordinates = remember {
+    mutableStateMapOf<Int, LayoutCoordinates>()
+    }
+
+    var readerCoordinates by remember {
+    mutableStateOf<LayoutCoordinates?>(null)
+    }
     var searchText by remember { mutableStateOf("") }
     var replaceText by remember { mutableStateOf("") }
 
@@ -100,8 +134,14 @@ fun ReaderScreen(
         mutableIntStateOf(0)
     }
 
-    val blocks = remember(novelId, currentChapter) {
+    var blocks by remember(novelId) {
+    mutableStateOf<JSONArray?>(null)
+    }
+
+    LaunchedEffect(novelId, currentChapter) {
+    blocks = withContext(Dispatchers.IO) {
         NovelStore.getChapterCache(context, novelId, currentChapter)
+        }
     }
 
     val paginationCache = remember(novelId) {
@@ -143,7 +183,7 @@ fun ReaderScreen(
                 .fillMaxSize()
         ) {
             val density = LocalDensity.current
-            val pageTextStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp,lineHeight = 17.sp
+            val pageTextStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp,lineHeight = 18.sp
             )
 
             val widthPx = with(density) {
@@ -174,59 +214,145 @@ fun ReaderScreen(
             }
 
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(currentChapter, currentPage, pages.size) {
-                        detectTapGestures { offset ->
-                            when {
-                                offset.x < size.width * 0.35f -> {
-                                    if (currentPage > 0) {
-                                        currentPage--
-                                    } else if (currentChapter > 0) {
-                                        goTo(currentChapter - 1)
-                                    }
-                                }
-
-                                offset.x > size.width * 0.75f -> {
-                                    if (currentPage < pages.lastIndex) {
-                                        currentPage++
-                                    } else if (currentChapter < lastChapter) {
-                                        goTo(currentChapter + 1)
-                                    }
-                                }
-
-                                else -> showBars = !showBars
+    modifier = Modifier
+        .fillMaxSize()
+        .onGloballyPositioned {
+            readerCoordinates = it
+        }
+        .pointerInput(currentChapter, currentPage, pages.size) {
+            detectTapGestures(
+                onTap = { offset ->
+                    when {
+                        offset.x < size.width * 0.35f -> {
+                            if (currentPage > 0) {
+                                currentPage--
+                            } else if (currentChapter > 0) {
+                                goTo(currentChapter - 1)
                             }
                         }
+
+                        offset.x > size.width * 0.75f -> {
+                            if (currentPage < pages.lastIndex) {
+                                currentPage++
+                            } else if (currentChapter < lastChapter) {
+                                goTo(currentChapter + 1)
+                            }
+                        }
+
+                        else -> showBars = !showBars
                     }
-                    .padding(16.dp)
-            ) {
-                pages.getOrNull(currentPage)?.forEach { pageBlock ->
-                    when {
-                        pageBlock.heading -> {
-                            Text(
-                                text = pageBlock.text,
-                                style = pageTextStyle,
-                                modifier = Modifier.padding(vertical = 12.dp)
-                            )
-                        }
+                },
+                onLongPress = { offset ->
+                    val parent = readerCoordinates ?: return@detectTapGestures
+                    val pageBlocks = pages.getOrNull(currentPage)
+                        ?: return@detectTapGestures
 
-                        pageBlock.fullHighlight -> {
-                            textforge.ui.components.HighlightedParagraph(
-                                text = pageBlock.text
-                            )
-                        }
+                    selectedWord = null
 
-                        else -> {
-                            textforge.ui.components.InlineHighlight(
-                                text = pageBlock.text,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
+                    pageBlocks.forEachIndexed { index, block ->
+                        val coordinates = textCoordinates[index]
+                            ?: return@forEachIndexed
+
+                        val layout = textLayouts[index]
+                            ?: return@forEachIndexed
+
+                        if (block.text.isEmpty()) return@forEachIndexed
+
+                        val localOffset = coordinates.localPositionOf(
+                            parent,
+                            offset
+                        )
+
+                        if (
+                            localOffset.x < 0f ||
+                            localOffset.y < 0f ||
+                            localOffset.x > coordinates.size.width ||
+                            localOffset.y > coordinates.size.height
+                        ) return@forEachIndexed
+
+                        val characterOffset = layout
+                            .getOffsetForPosition(localOffset)
+                            .coerceIn(0, block.text.length - 1)
+
+                        val wordRange = layout.getWordBoundary(characterOffset)
+
+                        val word = block.text.text
+                            .substring(wordRange.start, wordRange.end)
+                            .trim()
+
+                        if (word.isNotEmpty()) {
+                            selectedWord = word
+                            return@forEachIndexed
                         }
                     }
                 }
+            )
+        }
+        .padding(10.dp)
+) {
+    pages.getOrNull(currentPage)?.forEachIndexed { index, pageBlock ->
+        val onLayout: (TextLayoutResult) -> Unit = {
+            textLayouts[index] = it
+        }
+
+        val onPositioned: (LayoutCoordinates) -> Unit = {
+            textCoordinates[index] = it
+        }
+
+        when {
+            pageBlock.heading -> {
+                Text(
+                    text = pageBlock.text,
+                    style = pageTextStyle,
+                    modifier = Modifier
+                        .padding(vertical = 10.dp)
+                        .onGloballyPositioned(onPositioned),
+                    onTextLayout = onLayout
+                )
+            }
+
+            pageBlock.fullHighlight -> {
+                textforge.ui.components.HighlightedParagraph(
+                    text = pageBlock.text,
+                    onTextLayout = onLayout,
+                    onTextPositioned = onPositioned
+                )
+            }
+
+            else -> {
+                textforge.ui.components.InlineHighlight(
+                    text = pageBlock.text,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    onTextLayout = onLayout,
+                    onTextPositioned = onPositioned
+                )
             }
         }
+    }
+}
+        selectedWord?.let { word ->
+    AlertDialog(
+        onDismissRequest = {
+            selectedWord = null
+            },
+        title = {
+            Text(word)
+            },
+        text = {
+            Text("Dictionary lookup")
+            },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    selectedWord = null
+                    }
+            ) {
+                Text("Close")
+            }
+        }
+    )
+}
+    
 
         // TOP READER BAR
         AnimatedVisibility(
@@ -267,7 +393,7 @@ fun ReaderScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .padding(12.dp),
+                        .padding(15.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     FilledTonalButton(
@@ -372,7 +498,7 @@ fun ReaderScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .padding(horizontal = 12.dp, vertical = 3.dp)
                 ) {
                     Text(
                         "Table of Contents",
@@ -430,7 +556,7 @@ fun ReaderScreen(
                         TextButton(
                             enabled = tocPage > 0,
                             onClick = { tocPage-- },
-                            contentPadding = PaddingValues(8.dp)
+                            contentPadding = PaddingValues(12.dp)
                         ) {
                             Text("<")
                         }
