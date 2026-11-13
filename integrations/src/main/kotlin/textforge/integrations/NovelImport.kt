@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +23,7 @@ fun NovelFilePicker(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var importing by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -34,23 +37,24 @@ fun NovelFilePicker(
             )
         }
 
+        importing = true
         scope.launch {
             val id = withContext(Dispatchers.IO) {
-                runCatching { NovelStore.importNovel(context, uri) }.getOrNull()
+                runCatching { NovelStore.importNovel(context, uri) }
             }
-            if (id != null) {
-                onImported(id)
-            } else {
-                Toast.makeText(context, "Import failed", Toast.LENGTH_SHORT).show()
+            importing = false
+            id.onSuccess { onImported(it) }
+            id.onFailure {
+                Toast.makeText(context, "Import failed: ${it.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
 
-    Button(
-        onClick = {
-            picker.launch(arrayOf("text/*", "text/markdown"))
+    if (importing) {
+        Text("Importing… keep the app open")
+    } else {
+        Button(onClick = { picker.launch(arrayOf("text/*", "text/markdown")) }) {
+            Text("Import novel")
         }
-    ) {
-        Text("Import novel")
     }
 }

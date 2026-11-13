@@ -65,7 +65,12 @@ object NovelStore {
             put("sourceUri", uri.toString())
         }.write(File(dir, "metadata.json"))
 
-        buildCache(context, id)
+        try {
+            buildCache(context, id)
+        } catch (e: Throwable) {
+            dir.deleteRecursively()
+            throw e
+        }
 
         return id
     }
@@ -143,6 +148,7 @@ object NovelStore {
         return root(context).listFiles()?.mapNotNull { dir ->
             val file = File(dir, "metadata.json")
             if (!file.exists()) return@mapNotNull null
+            if (!File(dir, "index.json").exists()) return@mapNotNull null
 
             val json = JSONObject(file.readText())
             NovelMetadata(
