@@ -37,7 +37,7 @@ fun HighlightedParagraph(
     modifier = Modifier.padding(4.dp),
     color = Color(0xFF252525),
     fontSize = 17.sp,
-    lineHeight = 29.sp,
+    lineHeight = 18.sp,
     onTextLayout = onTextLayout
         )
     }

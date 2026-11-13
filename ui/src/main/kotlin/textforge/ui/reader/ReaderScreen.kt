@@ -31,6 +31,8 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.layout.LayoutCoordinates
+import org.json.JSONArray
+import textforge.parser.ChapterIndex
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.geometry.Offset
@@ -114,11 +116,11 @@ fun ReaderScreen(
     var showReplace by remember { mutableStateOf(false) }
     var selectedWord by remember { mutableStateOf<String?>(null) }
 
-    val textLayouts = remember {
+    val textLayouts = remember(currentChapter, currentPage) {
     mutableStateMapOf<Int, TextLayoutResult>()
     }
 
-    val textCoordinates = remember {
+    val textCoordinates = remember(currentChapter, currentPage) {
     mutableStateMapOf<Int, LayoutCoordinates>()
     }
 
@@ -266,8 +268,8 @@ fun ReaderScreen(
                         if (
                             localOffset.x < 0f ||
                             localOffset.y < 0f ||
-                            localOffset.x > coordinates.size.width ||
-                            localOffset.y > coordinates.size.height
+                            localOffset.x > coordinates.size.width.toFloat() ||
+                            localOffset.y > coordinates.size.height.toFloat()
                         ) return@forEachIndexed
 
                         val characterOffset = layout
