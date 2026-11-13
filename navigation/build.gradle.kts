@@ -22,6 +22,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":storage"))
     implementation(project(":ui"))
 
     implementation(platform("androidx.compose:compose-bom:2025.10.00"))

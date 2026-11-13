@@ -1,26 +1,49 @@
-
 package textforge.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import textforge.storage.NovelStore
 import textforge.ui.library.LibraryScreen
 import textforge.ui.reader.ReaderScreen
 
 @Composable
 fun AppNavigation() {
+    val context = LocalContext.current.applicationContext
     val navController = rememberNavController()
+
+    val startDestinationState = remember {
+        mutableStateOf<String?>(null)
+    }
+
+    LaunchedEffect(Unit) {
+        startDestinationState.value = withContext(Dispatchers.IO) {
+            NovelStore.getRestorableNovelId(context)
+                ?.let { Screen.Reader.createRoute(it) }
+                ?: Screen.Library.route
+        }
+    }
+
+    val startDestination = startDestinationState.value ?: return
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Library.route
+        startDestination = startDestination
     ) {
         composable(Screen.Library.route) {
             LibraryScreen(
                 onOpenNovel = { novelId ->
+                    NovelStore.saveLastNovelId(context, novelId)
+
                     navController.navigate(
                         Screen.Reader.createRoute(novelId)
                     )
@@ -36,7 +59,8 @@ fun AppNavigation() {
                 }
             )
         ) { entry ->
-            val novelId = entry.arguments?.getString("novelId") ?: return@composable
+            val novelId = entry.arguments?.getString("novelId")
+                ?: return@composable
 
             ReaderScreen(
                 novelId = novelId,

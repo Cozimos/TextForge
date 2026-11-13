@@ -16,6 +16,57 @@ object NovelStore {
     private const val MAX_CACHE_CHAPTERS = 4
     private const val MAX_MEMORY_BYTES = 16L * 1024 * 1024
 
+    private const val SESSION_PREFS = "reading_session"
+    private const val LAST_NOVEL_ID = "last_novel_id"
+
+    fun saveLastNovelId(context: Context, id: String) {
+    context.getSharedPreferences(SESSION_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putString(LAST_NOVEL_ID, id)
+        .apply()
+}
+
+    fun getRestorableNovelId(context: Context): String? {
+    return try {
+        val id = context.getSharedPreferences(
+            SESSION_PREFS,
+            Context.MODE_PRIVATE
+        ).getString(LAST_NOVEL_ID, null) ?: return null
+
+        val dir = File(context.filesDir, "novels/$id")
+        if (!dir.isDirectory) return null
+
+        if (!File(dir, "metadata.json").isFile ||
+            !File(dir, "index.json").isFile ||
+            !File(dir, "progress.json").isFile
+        ) return null
+
+        val metadata = JSONObject(File(dir, "metadata.json").readText())
+        if (metadata.optString("id") != id) return null
+
+        val progress = getProgress(context, id)
+        val chapters = getChapters(context, id)
+
+        if (chapters.none { it.number == progress.chapterNumber }) {
+            return null
+        }
+
+        val cache = File(
+            dir,
+            "chapters/%03d.json".format(progress.chapterNumber)
+        )
+
+        if (!cache.isFile) return null
+
+        val cacheJson = JSONObject(cache.readText())
+        cacheJson.getJSONArray("blocks")
+
+        id
+        } catch (e: Exception) {
+        null
+    }
+}
+
     private data class CachedChapter(
     val novelId: String,
     val chapter: Int,
