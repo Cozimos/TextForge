@@ -1,5 +1,6 @@
 
 package textforge.ui.library
+import androidx.compose.foundation.background
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -32,7 +33,7 @@ fun LibraryScreen(
         refresh()
     }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    Column(Modifier.fillMaxSize().background(NovelColors.Background).systemBarsPadding().padding(16.dp)) {
         NovelFilePicker {
             refresh()
         }

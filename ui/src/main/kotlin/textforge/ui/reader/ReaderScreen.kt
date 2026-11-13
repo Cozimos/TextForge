@@ -1,5 +1,10 @@
 
 package textforge.ui.reader
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -53,388 +58,218 @@ fun ReaderScreen(
 ) {
     val context = LocalContext.current
 
-    val chapters = remember(novelId) {
-        NovelStore.getChapters(context, novelId)
-    }
-
-    val progress = remember(novelId) {
-        NovelStore.getProgress(context, novelId)
-    }
-
-    val initialChapter = progress.chapterNumber.coerceIn(
-    0, (chapters.size - 1).coerceAtLeast(0)
-    )
+    val chapters = remember(novelId) { NovelStore.getChapters(context, novelId) }
+    val progress = remember(novelId) { NovelStore.getProgress(context, novelId) }
+    val lastChapter = (chapters.size - 1).coerceAtLeast(0)
 
     var currentChapter by remember(novelId) {
-    mutableIntStateOf(initialChapter)
+        mutableIntStateOf(progress.chapterNumber.coerceIn(0, lastChapter))
     }
+    var restoring by remember(novelId) { mutableStateOf(true) }
 
-    val blocks = remember(novelId, currentChapter) {
-    NovelStore.getChapterCache(context, novelId, currentChapter)
-} 
-
-    val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = progress.blockIndex.coerceIn(
-            0, (blocks.length() - 1).coerceAtLeast(0)
-        )
-    )
-
-    LaunchedEffect(listState, novelId, currentChapter) {
-    NovelStore.updateChapterWindow(
-        context = context,
-        id = novelId,
-        current = currentChapter,
-        chapterCount = chapters.size
-    )
-
-    snapshotFlow { listState.firstVisibleItemIndex }
-        .distinctUntilChanged()
-        .collect { blockIndex ->
-            NovelStore.saveProgress(
-                context,
-                novelId,
-                ReadingProgress(
-                    chapterNumber = currentChapter,
-                    blockIndex = blockIndex,
-                    byteOffset = chapters[currentChapter].startByte
-                )
-            )
-        }
-    }
-
-    
-    
-    Column(modifier = Modifier.fillMaxSize()) {
-    TextButton(onClick = onBack) {
-        Text("← Library")
-    }
-
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.weight(1f),
-        contentPadding = PaddingValues(16.dp)
-    ) {
-        itemsIndexed(
-            List(blocks.length()) { blocks.getJSONObject(it)}
-        ) { _, block ->
-            when (block.getString("type")) {
-                "heading" -> Text(
-                    text = block.getString("title"),
-                    modifier = Modifier.padding(vertical = 12.dp)
-                )
-
-                "paragraph" -> Text(
-    text = buildAnnotatedString {
-        val segments = block.getJSONArray("segments")
-        val fullHighlight = block.optBoolean("fullHighlight", false)
-
-        for (i in 0 until segments.length()) {
-            val segment = segments.getJSONObject(i)
-
-            withStyle(
-                SpanStyle(
-                    fontStyle = if (segment.getBoolean("italic")) {
-                        FontStyle.Italic
-                    } else {
-                        FontStyle.Normal
-                    },
-                    background = if (
-                        segment.getBoolean("highlighted") || fullHighlight
-                    ) {
-                        Color.Yellow
-                    } else {
-                        Color.Unspecified
-                    }
-                )
-            ) {
-                append(segment.getString("text"))
-            }
-        }
-    },
-    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-        }
-    }
-}
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-
-@Composable
-fun ReaderScreen(
-    novel: NovelItem,
-    document: NovelDocument,
-    onBack: () -> Unit
-) {
+    var showBars by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showTOC by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
     var showReplace by remember { mutableStateOf(false) }
-
     var searchText by remember { mutableStateOf("") }
     var replaceText by remember { mutableStateOf("") }
 
-    var currentChapter by remember { mutableIntStateOf(0) }
+    val blocks = remember(novelId, currentChapter) {
+        NovelStore.getChapterCache(context, novelId, currentChapter)
+    }
+    val items = remember(blocks) { List(blocks.length()) { blocks.getJSONObject(it) } }
 
-    val scrollState = rememberLazyListState()
+    val listState = remember(novelId, currentChapter) {
+        LazyListState(
+            if (restoring) progress.blockIndex.coerceIn(0, (blocks.length() - 1).coerceAtLeast(0)) else 0
+        )
+    }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+    fun goTo(chapter: Int) {
+        val target = chapter.coerceIn(0, lastChapter)
+        if (target != currentChapter) {
+            restoring = false
+            currentChapter = target
+        }
+    }
 
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(novel.title, maxLines = 1)
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
+    LaunchedEffect(listState, novelId, currentChapter) {
+        NovelStore.updateChapterWindow(
+            context = context,
+            id = novelId,
+            current = currentChapter,
+            chapterCount = chapters.size
+        )
+
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .distinctUntilChanged()
+            .collect { blockIndex ->
+                NovelStore.saveProgress(
+                    context,
+                    novelId,
+                    ReadingProgress(
+                        chapterNumber = currentChapter,
+                        blockIndex = blockIndex,
+                        byteOffset = chapters[currentChapter].startByte
+                    )
+                )
+            }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NovelColors.Background)
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .systemBarsPadding()
+                .pointerInput(currentChapter) {
+                    detectTapGestures { offset ->
+                        val w = size.width
+                        when {
+                            offset.x < w * 0.3f -> goTo(currentChapter - 1)
+                            offset.x > w * 0.7f -> goTo(currentChapter + 1)
+                            else -> showBars = !showBars
+                        }
                     }
-                }
-            )
-        },
-
-        bottomBar = {
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-
-                FilledTonalButton(
-                    onClick = { showMenu = true },
-                    shape = RoundedCornerShape(50.dp)
-                ) {
-                    Icon(
-                        Icons.Default.KeyboardArrowUp,
-                        contentDescription = "Reader menu"
+                },
+            contentPadding = PaddingValues(16.dp)
+        ) {
+            itemsIndexed(items) { _, block ->
+                when (block.getString("type")) {
+                    "heading" -> Text(
+                        text = block.getString("title"),
+                        modifier = Modifier.padding(vertical = 12.dp)
                     )
 
-                    Spacer(Modifier.width(8.dp))
-
-                    Text("Reader Menu")
+                    "paragraph" -> Text(
+                        text = buildAnnotatedString {
+                            val segments = block.getJSONArray("segments")
+                            val fullHighlight = block.optBoolean("fullHighlight", false)
+                            for (i in 0 until segments.length()) {
+                                val segment = segments.getJSONObject(i)
+                                withStyle(
+                                    SpanStyle(
+                                        fontStyle = if (segment.getBoolean("italic")) FontStyle.Italic else FontStyle.Normal,
+                                        background = if (segment.getBoolean("highlighted") || fullHighlight) Color.Yellow else Color.Unspecified
+                                    )
+                                ) {
+                                    append(segment.getString("text"))
+                                }
+                            }
+                        },
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
                 }
             }
         }
 
-    ) { padding ->
-
-        LazyColumn(
-            state = scrollState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(
-                horizontal = 22.dp,
-                vertical = 24.dp
-            )
+        AnimatedVisibility(
+            visible = showBars,
+            modifier = Modifier.align(Alignment.TopCenter)
         ) {
+            Surface(color = NovelColors.MenuBackground, modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.statusBarsPadding().padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onBack) { Text("← Library") }
+                    Spacer(Modifier.weight(1f))
+                    Text("${currentChapter + 1} / ${chapters.size}")
+                }
+            }
+        }
 
-            itemsIndexed(document.blocks) { index, block ->
-
-                when (block) {
-
-                    is NovelBlock.Heading -> {
-
-                        Surface(
-                            color = Color(0xFFDCEEFF),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp)
-                        ) {
-
-                            Text(
-                                block.title,
-                                modifier = Modifier.padding(14.dp),
-                                color = Color(0xFF174B80),
-                                fontSize = 23.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    is NovelBlock.Paragraph -> {
-
-                        val text = buildAnnotatedString {
-
-                            block.segments.forEach { segment ->
-
-                                withStyle(
-                                    SpanStyle(
-                                        background = if (segment.highlighted)
-                                            Color(0xFFDCEEFF)
-                                        else Color.Transparent,
-
-                                        fontStyle = if (segment.italic)
-                                            FontStyle.Italic
-                                        else FontStyle.Normal
-                                    )
-                                ) {
-                                    append(segment.text)
-                                }
-                            }
-                        }
-
-                        if (block.fullHighlight) {
-
-                            Surface(
-                                color = Color(0xFFDCEEFF),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp)
-                            ) {
-
-                                Text(
-                                    text,
-                                    modifier = Modifier.padding(14.dp),
-                                    fontSize = 17.sp,
-                                    lineHeight = 29.sp
-                                )
-                            }
-
-                        } else {
-
-                            Text(
-                                text,
-                                fontSize = 17.sp,
-                                lineHeight = 29.sp,
-                                modifier = Modifier.padding(vertical = 9.dp)
-                            )
-                        }
+        AnimatedVisibility(
+            visible = showBars,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            Surface(color = NovelColors.MenuBackground, modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    FilledTonalButton(
+                        onClick = { showMenu = true },
+                        shape = RoundedCornerShape(50.dp)
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Reader menu")
+                        Spacer(Modifier.width(8.dp))
+                        Text("Reader Menu")
                     }
                 }
             }
         }
     }
 
-    // Reader bottom sheet
-
     if (showMenu) {
-
         ModalBottomSheet(
             onDismissRequest = { showMenu = false },
             containerColor = NovelColors.MenuBackground
         ) {
-
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(20.dp)
                     .navigationBarsPadding()
             ) {
-
-                Text(
-                    "Reader Tools",
-                    style = MaterialTheme.typography.titleLarge
-                )
-
+                Text("Reader Tools", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(20.dp))
 
                 Button(
-                    onClick = {
-                        showMenu = false
-                        showTOC = true
-                    },
+                    onClick = { showMenu = false; showTOC = true },
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Table of Contents")
-                }
+                ) { Text("Table of Contents") }
 
                 OutlinedButton(
-                    onClick = {
-                        showMenu = false
-                        showSearch = true
-                    },
+                    onClick = { showMenu = false; showSearch = true },
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Search Word")
-                }
+                ) { Text("Search Word") }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-
-                    OutlinedButton(
-                        onClick = {
-                            currentChapter =
-                                (currentChapter - 1).coerceAtLeast(0)
-                        }
-                    ) {
-                        Text("< Previous")
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            currentChapter =
-                                (currentChapter + 1)
-                                    .coerceAtMost(document.toc.lastIndex)
-                        }
-                    ) {
-                        Text("Next >")
-                    }
+                    OutlinedButton(onClick = { goTo(currentChapter - 1) }) { Text("< Previous") }
+                    OutlinedButton(onClick = { goTo(currentChapter + 1) }) { Text("Next >") }
                 }
 
                 OutlinedButton(
-                    onClick = {
-                        showMenu = false
-                        showReplace = true
-                    },
+                    onClick = { showMenu = false; showReplace = true },
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Find & Replace")
-                }
+                ) { Text("Find & Replace") }
 
                 Spacer(Modifier.height(20.dp))
             }
         }
     }
 
-    // TOC dialog
-
     if (showTOC) {
-
         AlertDialog(
             onDismissRequest = { showTOC = false },
+            containerColor = NovelColors.MenuBackground,
             title = { Text("Table of Contents") },
             text = {
                 LazyColumn {
-                    itemsIndexed(document.toc) { index, entry ->
-
-                        TextButton(
-                            onClick = {
-                                currentChapter = index
-                                showTOC = false
-                            }
-                        ) {
-                            Text(entry.title)
+                    itemsIndexed(chapters) { index, chapter ->
+                        TextButton(onClick = { goTo(index); showTOC = false }) {
+                            Text(chapter.title)
                         }
                     }
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showTOC = false }) {
-                    Text("Close")
-                }
-            }
+            confirmButton = { TextButton(onClick = { showTOC = false }) { Text("Close") } }
         )
     }
 
-    // Search dialog
-
     if (showSearch) {
-
         AlertDialog(
             onDismissRequest = { showSearch = false },
+            containerColor = NovelColors.MenuBackground,
             title = { Text("Search Novel") },
             text = {
                 OutlinedTextField(
@@ -444,34 +279,23 @@ fun ReaderScreen(
                     singleLine = true
                 )
             },
-            confirmButton = {
-                TextButton(onClick = { showSearch = false }) {
-                    Text("Search")
-                }
-            }
+            confirmButton = { TextButton(onClick = { showSearch = false }) { Text("Search") } }
         )
     }
 
-    // Replace dialog
-
     if (showReplace) {
-
         AlertDialog(
-            containerColor = NovelColors.MenuBackground,
             onDismissRequest = { showReplace = false },
+            containerColor = NovelColors.MenuBackground,
             title = { Text("Find & Replace") },
             text = {
-
                 Column {
-
                     OutlinedTextField(
                         value = searchText,
                         onValueChange = { searchText = it },
                         label = { Text("Find") }
                     )
-
                     Spacer(Modifier.height(12.dp))
-
                     OutlinedTextField(
                         value = replaceText,
                         onValueChange = { replaceText = it },
@@ -479,11 +303,7 @@ fun ReaderScreen(
                     )
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showReplace = false }) {
-                    Text("Replace")
-                }
-            }
+            confirmButton = { TextButton(onClick = { showReplace = false }) { Text("Replace") } }
         )
     }
 }
