@@ -1,5 +1,22 @@
 
 package textforge.ui.reader
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,6 +46,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.withStyle
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun ReaderScreen(
     novelId: String,
     onBack: () -> Unit
@@ -144,6 +162,7 @@ fun ReaderScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun ReaderScreen(
     novel: NovelItem,
     document: NovelDocument,
