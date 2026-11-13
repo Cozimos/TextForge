@@ -13,6 +13,9 @@ import androidx.compose.ui.unit.dp
 import textforge.integrations.NovelFilePicker
 import textforge.storage.NovelMetadata
 import textforge.storage.NovelStore
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 @Composable
 fun LibraryScreen(

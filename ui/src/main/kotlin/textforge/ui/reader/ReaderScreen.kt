@@ -19,6 +19,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
+import textforge.ui.library.NovelItem
+import textforge.parser.NovelDocument
+import textforge.parser.NovelBlock
 
 @Composable
 fun ReaderScreen(novelId: String) {
@@ -61,14 +64,24 @@ fun ReaderScreen(novelId: String) {
                 )
             }
     }
+    
+    @Composable
+fun ReaderScreen(
+    novelId: String,
+    onBack: () -> Unit
+    ) {
+    Column(modifier = Modifier.fillMaxSize()) {
+    TextButton(onClick = onBack) {
+        Text("← Library")
+    }
 
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.Modifier.weight(1f),
         contentPadding = PaddingValues(16.dp)
     ) {
         itemsIndexed(
-            List(blocks.length()) { blocks.getJSONObject(it) }
+            List(blocks.length()) { blocks.getJSONObject(it)}
         ) { _, block ->
             when (block.getString("type")) {
                 "heading" -> Text(
