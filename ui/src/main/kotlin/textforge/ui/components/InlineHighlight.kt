@@ -20,8 +20,8 @@ import androidx.compose.ui.unit.sp
 fun InlineHighlight(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
-    fontSize: TextUnit = 17.sp,
-    lineHeight: TextUnit = 29.sp
+    fontSize: TextUnit = 20.sp,
+    lineHeight: TextUnit = 16.sp
 ) {
 
     var layoutResult by remember {

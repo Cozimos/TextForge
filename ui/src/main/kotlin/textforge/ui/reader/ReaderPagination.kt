@@ -19,8 +19,69 @@ internal data class ReaderPageBlock(
     val fullHighlight: Boolean
 )
 
+internal class ReaderPaginationCache {
+
+    private data class Entry(
+        val blocks: JSONArray,
+        val widthPx: Int,
+        val heightPx: Int,
+        val density: Float,
+        val fontScale: Float,
+        val style: TextStyle,
+        val pages: List<List<ReaderPageBlock>>
+    )
+
+    private val entries = LinkedHashMap<Int, Entry>(8, 0.75f, true)
+
+    fun get(
+        chapter: Int,
+        blocks: JSONArray,
+        widthPx: Int,
+        heightPx: Int,
+        density: Density,
+        style: TextStyle
+    ): List<List<ReaderPageBlock>>? {
+        val entry = entries[chapter] ?: return null
+
+        return if (
+            entry.blocks === blocks &&
+            entry.widthPx == widthPx &&
+            entry.heightPx == heightPx &&
+            entry.density == density.density &&
+            entry.fontScale == density.fontScale &&
+            entry.style == style
+        ) entry.pages else null
+    }
+
+    fun put(
+        chapter: Int,
+        blocks: JSONArray,
+        widthPx: Int,
+        heightPx: Int,
+        density: Density,
+        style: TextStyle,
+        pages: List<List<ReaderPageBlock>>
+    ) {
+        entries[chapter] = Entry(
+            blocks,
+            widthPx,
+            heightPx,
+            density.density,
+            density.fontScale,
+            style,
+            pages
+        )
+
+        while (entries.size > 8) {
+            entries.remove(entries.keys.first())
+        }
+    }
+}
+
 @Composable
 internal fun rememberReaderPages(
+    chapter: Int,
+    cache: ReaderPaginationCache,
     blocks: JSONArray,
     widthPx: Int,
     heightPx: Int,
@@ -30,7 +91,13 @@ internal fun rememberReaderPages(
 
     val measurer = rememberTextMeasurer()
 
-    return remember(blocks, widthPx, heightPx, density, style) {
+    return remember(
+    chapter, blocks, widthPx, heightPx,
+    density.density, density.fontScale, style
+) {
+    cache.get(
+        chapter, blocks, widthPx, heightPx, density, style
+    ) ?: run {
         val pages = mutableListOf<List<ReaderPageBlock>>()
         var page = mutableListOf<ReaderPageBlock>()
         var usedHeight = 0
@@ -144,8 +211,15 @@ internal fun rememberReaderPages(
 
         finishPage()
 
-        pages.ifEmpty {
+        val result = pages.ifEmpty {
             mutableListOf(mutableListOf())
+        }
+
+        cache.put(
+            chapter, blocks, widthPx, heightPx,
+            density, style, result
+        )
+        result
         }
     }
 }

@@ -27,6 +27,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import textforge.storage.NovelStore
 import textforge.ui.NovelColors
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -103,12 +104,21 @@ fun ReaderScreen(
         NovelStore.getChapterCache(context, novelId, currentChapter)
     }
 
-    fun goTo(chapter: Int) {
-        val target = chapter.coerceIn(0, lastChapter)
+    val paginationCache = remember(novelId) {
+    ReaderPaginationCache()
+}
 
-        if (target != currentChapter) {
-            currentChapter = target
-            currentPage = 0
+    val chapterPages = remember(novelId) {
+    mutableStateMapOf<Int, Int>()
+}
+
+    fun goTo(chapter: Int) {
+    val target = chapter.coerceIn(0, lastChapter)
+
+    if (target != currentChapter) {
+        chapterPages[currentChapter] = currentPage
+        currentChapter = target
+        currentPage = chapterPages[target] ?: 0
         }
     }
 
@@ -131,10 +141,9 @@ fun ReaderScreen(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .systemBarsPadding()
         ) {
             val density = LocalDensity.current
-            val pageTextStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 28.sp,lineHeight = 29.sp
+            val pageTextStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 20.sp,lineHeight = 16.sp
             )
 
             val widthPx = with(density) {
@@ -146,6 +155,10 @@ fun ReaderScreen(
             }
 
             val pages = rememberReaderPages(
+
+                chapter = currentChapter,
+                cache = paginationCache,
+
                 blocks = blocks,
                 widthPx = widthPx.coerceAtLeast(1),
                 heightPx = heightPx.coerceAtLeast(1),
@@ -346,16 +359,26 @@ fun ReaderScreen(
         }
     }
 
-    // TABLE OF CONTENTS
+        // TABLE OF CONTENTS
     if (showTOC) {
-        AlertDialog(
-            onDismissRequest = { showTOC = false },
-            containerColor = NovelColors.MenuBackground,
-            title = {
-                Text("Table of Contents")
-            },
-            text = {
-                Column {
+        Dialog(
+            onDismissRequest = { showTOC = false }
+        ) {
+            Surface(
+                color = NovelColors.MenuBackground,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        "Table of Contents",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+
                     val tocPageCount =
                         (chapters.size + tocPageSize - 1) / tocPageSize
 
@@ -386,7 +409,7 @@ fun ReaderScreen(
                                     color = if (chapterIndex == currentChapter) {
                                         Color(0xFFFFCC80)
                                     } else {
-                                        Color.White
+                                        Color.Black
                                     },
                                     fontWeight = if (chapterIndex == currentChapter) {
                                         FontWeight.Bold
@@ -399,8 +422,6 @@ fun ReaderScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(4.dp))
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -408,7 +429,8 @@ fun ReaderScreen(
                     ) {
                         TextButton(
                             enabled = tocPage > 0,
-                            onClick = { tocPage-- }
+                            onClick = { tocPage-- },
+                            contentPadding = PaddingValues(8.dp)
                         ) {
                             Text("<")
                         }
@@ -419,19 +441,26 @@ fun ReaderScreen(
 
                         TextButton(
                             enabled = tocPage < tocPageCount - 1,
-                            onClick = { tocPage++ }
+                            onClick = { tocPage++ },
+                            contentPadding = PaddingValues(8.dp)
                         ) {
                             Text(">")
                         }
                     }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showTOC = false }) {
+
+                    TextButton(
+                        onClick = { showTOC = false },
+                        modifier = Modifier.align(Alignment.End),
+                        contentPadding = PaddingValues(
+                            horizontal = 8.dp,
+                            vertical = 0.dp
+                        )
+                    ) {
                     Text("Close")
+                    }
                 }
             }
-        )
+        }
     }
 
     // SEARCH
