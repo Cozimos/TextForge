@@ -2,6 +2,7 @@ package textforge.ui.reader
 
 import android.app.Activity
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -26,6 +27,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -43,6 +45,7 @@ import textforge.storage.NovelStore
 import textforge.storage.ReadingProgress
 import textforge.ui.NovelColors
 import textforge.ui.dictionary.StarDictManager
+import textforge.ui.components.DictionaryHtmlView
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -103,10 +106,12 @@ fun ReaderScreen(
 
         chapters = loadedChapters
         if (loadedChapters.isNotEmpty()) {
-            currentChapter = savedProgress.chapterNumber.coerceIn(
-                0,
-                loadedChapters.lastIndex
-            )
+            val chapterFromOffset = loadedChapters.indexOfFirst { chapter ->
+                savedProgress.byteOffset >= chapter.startByte &&
+                    savedProgress.byteOffset < chapter.endByte
+            }
+            currentChapter = (if (chapterFromOffset >= 0) chapterFromOffset
+                else savedProgress.chapterNumber).coerceIn(0, loadedChapters.lastIndex)
             currentPage = savedProgress.pageIndex.coerceAtLeast(0)
         } else {
             currentChapter = 0
@@ -116,6 +121,8 @@ fun ReaderScreen(
     }
 
     val lastChapter = (chapters.size - 1).coerceAtLeast(0)
+
+    BackHandler { onBack() }
 
     var showBars by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -510,7 +517,11 @@ fun ReaderScreen(
                                 if (dictionaryMatchType == StarDictManager.MatchType.SYNONYM) {
                                     Text("Synonym entry", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
                                 }
-                                Text(dictionaryDefinition!!)
+                                DictionaryHtmlView(
+                                    html = dictionaryDefinition!!,
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 520.dp),
+                                    isDarkTheme = isSystemInDarkTheme()
+                                )
                             }
                             dictionaryMessage != null -> Text(dictionaryMessage!!, color = MaterialTheme.colorScheme.error)
                             dictionarySuggestions.isNotEmpty() -> {
@@ -553,8 +564,11 @@ fun ReaderScreen(
                         .padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onBack) {
-                        Text("← Library")
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.ArrowBack,
+                            contentDescription = "Back to library"
+                        )
                     }
 
                     Spacer(Modifier.weight(1f))
@@ -696,7 +710,7 @@ fun ReaderScreen(
                     val end = minOf(start + tocPageSize, chapters.size)
 
                     LazyColumn(
-                        modifier = Modifier.heightIn(max = 900.dp)
+                        modifier = Modifier.heightIn(max = 888.dp)
                     ) {
                         itemsIndexed(chapters.subList(start, end)) { index, chapter ->
                             val chapterIndex = start + index
@@ -708,7 +722,7 @@ fun ReaderScreen(
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(48.dp),
+                                    .height(45.dp),
                                 contentPadding = PaddingValues(
                                     horizontal = 7.dp,
                                     vertical = 0.dp

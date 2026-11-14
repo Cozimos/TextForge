@@ -27,45 +27,22 @@ object NovelStore {
 }
 
     fun getRestorableNovelId(context: Context): String? {
-    return try {
-        val id = context.getSharedPreferences(
-            SESSION_PREFS,
-            Context.MODE_PRIVATE
-        ).getString(LAST_NOVEL_ID, null) ?: return null
-
-        val dir = File(context.filesDir, "novels/$id")
-        if (!dir.isDirectory) return null
-
-        if (!File(dir, "metadata.json").isFile ||
-            !File(dir, "index.json").isFile ||
-            !File(dir, "progress.json").isFile
-        ) return null
-
-        val metadata = JSONObject(File(dir, "metadata.json").readText())
-        if (metadata.optString("id") != id) return null
-
-        val progress = getProgress(context, id)
-        val chapters = getChapters(context, id)
-
-        if (chapters.none { it.number == progress.chapterNumber }) {
-            return null
+        return try {
+            val id = context.getSharedPreferences(
+                SESSION_PREFS, Context.MODE_PRIVATE
+            ).getString(LAST_NOVEL_ID, null) ?: return null
+            val dir = File(context.filesDir, "novels/$id")
+            if (!dir.isDirectory) return null
+            val metadata = File(dir, "metadata.json")
+            val index = File(dir, "index.json")
+            val progress = File(dir, "progress.json")
+            if (!metadata.isFile || !index.isFile || !progress.isFile) return null
+            if (JSONObject(metadata.readText()).optString("id") != id) return null
+            id
+        } catch (_: Exception) {
+            null
         }
-
-        val cache = File(
-            dir,
-            "chapters/%03d.json".format(progress.chapterNumber)
-        )
-
-        if (!cache.isFile) return null
-
-        val cacheJson = JSONObject(cache.readText())
-        cacheJson.getJSONArray("blocks")
-
-        id
-        } catch (e: Exception) {
-        null
     }
-}
 
     private data class CachedChapter(
     val novelId: String,
@@ -219,6 +196,29 @@ object NovelStore {
                 sourceUri = json.getString("sourceUri")
             )
         } ?: emptyList()
+    }
+
+    /** Remove a book and all of its on-disk chapter/progress caches. */
+    fun deleteNovel(context: Context, id: String): Boolean {
+        val removed = synchronized(buildLock) {
+            File(root(context), id).deleteRecursively()
+        }
+        synchronized(cacheLock) {
+            memoryCache.removeAll { it.novelId == id }
+            memoryBytes = memoryCache.sumOf { entry -> entry.estimatedBytes }
+            pendingLoads.removeAll { it.first == id }
+            if (activeNovelId == id) {
+                activeNovelId = null
+                windowStart = 0
+                windowEnd = -1
+                currentChapter = 0
+            }
+        }
+        val prefs = context.getSharedPreferences(SESSION_PREFS, Context.MODE_PRIVATE)
+        if (prefs.getString(LAST_NOVEL_ID, null) == id) {
+            prefs.edit().remove(LAST_NOVEL_ID).apply()
+        }
+        return removed
     }
 
     fun getChapters(context: Context, id: String): List<ChapterIndex> {

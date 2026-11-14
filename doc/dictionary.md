@@ -35,6 +35,6 @@ The Android Storage Access Framework folder picker is used. TextForge copies the
 ## Current limitations
 
 - Morphological stemming (for example, `running` to `run`) is not implemented.
-- Rich HTML styling in definitions is not yet rendered; dictionary entry text is shown in the reader dialog.
+- Dictionary definitions are rendered in an isolated WebView with JavaScript and file/content access disabled.
 - Wildcard and full-text APIs exist but do not yet have a dedicated search UI.
 - Fuzzy matching is a simple bounded Levenshtein-distance suggestion pass, not a byte-for-byte reproduction of every SDCV option or ranking rule.

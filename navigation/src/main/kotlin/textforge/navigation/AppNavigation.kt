@@ -1,11 +1,13 @@
 package textforge.navigation
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -17,7 +19,10 @@ import textforge.ui.library.LibraryScreen
 import textforge.ui.reader.ReaderScreen
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    incomingUri: Uri? = null,
+    onIncomingUriConsumed: () -> Unit = {}
+) {
     val context = LocalContext.current.applicationContext
     val navController = rememberNavController()
 
@@ -26,14 +31,29 @@ fun AppNavigation() {
     }
 
     LaunchedEffect(Unit) {
-        startDestinationState.value = withContext(Dispatchers.IO) {
-            NovelStore.getRestorableNovelId(context)
-                ?.let { Screen.Reader.createRoute(it) }
-                ?: Screen.Library.route
+        startDestinationState.value = if (incomingUri != null) {
+            Screen.Library.route
+        } else {
+            withContext(Dispatchers.IO) {
+                NovelStore.getRestorableNovelId(context)
+                    ?.let { Screen.Reader.createRoute(it) }
+                    ?: Screen.Library.route
+            }
         }
     }
 
     val startDestination = startDestinationState.value ?: return
+    val currentEntry by navController.currentBackStackEntryAsState()
+
+    LaunchedEffect(incomingUri, currentEntry?.destination?.route) {
+        if (incomingUri != null &&
+            currentEntry?.destination?.route != Screen.Library.route
+        ) {
+            navController.navigate(Screen.Library.route) {
+                launchSingleTop = true
+            }
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -41,6 +61,8 @@ fun AppNavigation() {
     ) {
         composable(Screen.Library.route) {
             LibraryScreen(
+                incomingUri = incomingUri,
+                onIncomingUriConsumed = onIncomingUriConsumed,
                 onOpenNovel = { novelId ->
                     NovelStore.saveLastNovelId(context, novelId)
 
@@ -64,7 +86,14 @@ fun AppNavigation() {
 
             ReaderScreen(
                 novelId = novelId,
-                onBack = { navController.popBackStack() }
+                onBack = {
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.Library.route) {
+                            popUpTo(Screen.Reader.route) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                }
             )
         }
     }
