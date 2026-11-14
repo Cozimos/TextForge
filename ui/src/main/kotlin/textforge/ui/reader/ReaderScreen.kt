@@ -1,9 +1,14 @@
 package textforge.ui.reader
 
 import android.app.Activity
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -37,6 +42,7 @@ import textforge.parser.ChapterIndex
 import textforge.storage.NovelStore
 import textforge.storage.ReadingProgress
 import textforge.ui.NovelColors
+import textforge.ui.dictionary.StarDictManager
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -117,6 +123,68 @@ fun ReaderScreen(
     var showSearch by remember { mutableStateOf(false) }
     var showReplace by remember { mutableStateOf(false) }
     var selectedWord by remember { mutableStateOf<String?>(null) }
+    var dictionaryName by remember { mutableStateOf(StarDictManager.installedName(context)) }
+    var dictionaryDefinition by remember { mutableStateOf<String?>(null) }
+    var dictionaryMatchType by remember { mutableStateOf(StarDictManager.MatchType.NONE) }
+    var dictionarySuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+    var dictionaryLoading by remember { mutableStateOf(false) }
+    var dictionaryMessage by remember { mutableStateOf<String?>(null) }
+    var folderToInstall by remember { mutableStateOf<Uri?>(null) }
+
+    val dictionaryFolderPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: SecurityException) {
+                // The import is copied into app-private storage immediately.
+            }
+            folderToInstall = uri
+        }
+    }
+
+    LaunchedEffect(folderToInstall) {
+        val uri = folderToInstall ?: return@LaunchedEffect
+        dictionaryMessage = null
+        dictionaryDefinition = null
+        try {
+            val name = withContext(Dispatchers.IO) {
+                StarDictManager.installFromFolder(context, uri)
+            }
+            dictionaryName = name
+            dictionaryMessage = "Dictionary installed: $name"
+        } catch (error: Exception) {
+            dictionaryMessage = error.message ?: "Could not install this dictionary."
+        } finally {
+            folderToInstall = null
+        }
+    }
+
+    LaunchedEffect(selectedWord, dictionaryName) {
+        val word = selectedWord ?: return@LaunchedEffect
+        dictionaryDefinition = null
+        dictionarySuggestions = emptyList()
+        dictionaryMatchType = StarDictManager.MatchType.NONE
+        if (dictionaryName == null) return@LaunchedEffect
+        dictionaryLoading = true
+        dictionaryMessage = null
+        try {
+            val result = withContext(Dispatchers.IO) {
+                StarDictManager.lookupSmart(context, word)
+            }
+            dictionaryDefinition = result.entry?.definition
+            dictionaryMatchType = result.matchedBy
+            dictionarySuggestions = result.suggestions
+        } catch (error: Exception) {
+            dictionaryMessage = error.message ?: "Dictionary lookup failed."
+        } finally {
+            dictionaryLoading = false
+        }
+    }
 
     val textLayouts = remember(currentChapter, currentPage) {
         mutableStateMapOf<Int, TextLayoutResult>()
@@ -421,7 +489,47 @@ fun ReaderScreen(
             AlertDialog(
                 onDismissRequest = { selectedWord = null },
                 title = { Text(word) },
-                text = { Text("Dictionary lookup") },
+                text = {
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        when {
+                            dictionaryName == null -> {
+                                Text("No dictionary installed yet.")
+                                Text("Choose the folder containing exactly one StarDict dictionary: its matching .ifo, .idx and .dict or .dict.dz files. Select the dictionary's own folder, not KOReader's parent dict folder.")
+                                if (dictionaryMessage != null) {
+                                    Text(dictionaryMessage!!, color = MaterialTheme.colorScheme.error)
+                                }
+                                TextButton(onClick = { dictionaryFolderPicker.launch(null) }) {
+                                    Text("Choose dictionary folder")
+                                }
+                            }
+                            dictionaryLoading -> Text("Looking up…")
+                            dictionaryDefinition != null -> {
+                                if (dictionaryMatchType == StarDictManager.MatchType.SYNONYM) {
+                                    Text("Synonym entry", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+                                }
+                                Text(dictionaryDefinition!!)
+                            }
+                            dictionaryMessage != null -> Text(dictionaryMessage!!, color = MaterialTheme.colorScheme.error)
+                            dictionarySuggestions.isNotEmpty() -> {
+                                Text("No exact match. Similar headwords:", style = MaterialTheme.typography.bodyMedium)
+                                dictionarySuggestions.forEach { suggestion ->
+                                    TextButton(onClick = { selectedWord = suggestion }) {
+                                        Text(suggestion)
+                                    }
+                                }
+                            }
+                            else -> Text("No entry found in $dictionaryName.")
+                        }
+                        if (dictionaryName != null) {
+                            TextButton(onClick = { dictionaryFolderPicker.launch(null) }) {
+                                Text("Change dictionary")
+                            }
+                        }
+                    }
+                },
                 confirmButton = {
                     TextButton(onClick = { selectedWord = null }) {
                         Text("Close")

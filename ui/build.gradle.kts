@@ -24,6 +24,7 @@ android {
 dependencies {
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.documentfile:documentfile:1.0.1")
     implementation(project(":parser"))
     implementation(project(":storage"))
     implementation(project(":integrations"))
