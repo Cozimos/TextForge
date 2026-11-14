@@ -151,7 +151,7 @@ object NovelStore {
         saveProgress(
             context,
             id,
-            ReadingProgress(0, 0, chapters.firstOrNull()?.startByte ?: 0L)
+            ReadingProgress(0, 0, chapters.firstOrNull()?.startByte ?: 0L, 0)
         )
     }
 
@@ -460,6 +460,7 @@ fun updateChapterWindow(
             put("chapterNumber", progress.chapterNumber)
             put("blockIndex", progress.blockIndex)
             put("byteOffset", progress.byteOffset)
+            put("pageIndex", progress.pageIndex)
         }.write(File(folder(context, id), "progress.json"))
     }
 
@@ -471,7 +472,8 @@ fun updateChapterWindow(
         return ReadingProgress(
             json.getInt("chapterNumber"),
             json.getInt("blockIndex"),
-            json.getLong("byteOffset")
+            json.getLong("byteOffset"),
+            json.optInt("pageIndex", 0)
         )
     }
 

@@ -9,5 +9,6 @@ data class NovelMetadata(
 data class ReadingProgress(
     val chapterNumber: Int,
     val blockIndex: Int,
-    val byteOffset: Long
+    val byteOffset: Long,
+    val pageIndex: Int = 0
 )

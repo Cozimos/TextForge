@@ -35,6 +35,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import textforge.parser.ChapterIndex
 import textforge.storage.NovelStore
+import textforge.storage.ReadingProgress
 import textforge.ui.NovelColors
 
 @Composable
@@ -73,34 +74,42 @@ fun ReaderScreen(
         mutableStateOf<List<ChapterIndex>>(emptyList())
     }
 
-    LaunchedEffect(novelId) {
-        chapters = withContext(Dispatchers.IO) {
-            NovelStore.getChapters(context, novelId)
-        }
-    }
-
-    val lastChapter = (chapters.size - 1).coerceAtLeast(0)
-
     var currentChapter by remember(novelId) {
         mutableIntStateOf(0)
-    }
-
-    LaunchedEffect(novelId, chapters) {
-        if (chapters.isNotEmpty()) {
-            val progress = withContext(Dispatchers.IO) {
-                NovelStore.getProgress(context, novelId)
-            }
-
-            currentChapter = progress.chapterNumber.coerceIn(
-                0,
-                chapters.lastIndex
-            )
-        }
     }
 
     var currentPage by remember(novelId) {
         mutableIntStateOf(0)
     }
+
+    // Do not load/prefetch chapters or write progress until the saved
+    // reading position has been restored.
+    var progressLoaded by remember(novelId) {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(novelId) {
+        val (loadedChapters, savedProgress) = withContext(Dispatchers.IO) {
+            val loaded = NovelStore.getChapters(context, novelId)
+            val progress = NovelStore.getProgress(context, novelId)
+            loaded to progress
+        }
+
+        chapters = loadedChapters
+        if (loadedChapters.isNotEmpty()) {
+            currentChapter = savedProgress.chapterNumber.coerceIn(
+                0,
+                loadedChapters.lastIndex
+            )
+            currentPage = savedProgress.pageIndex.coerceAtLeast(0)
+        } else {
+            currentChapter = 0
+            currentPage = 0
+        }
+        progressLoaded = true
+    }
+
+    val lastChapter = (chapters.size - 1).coerceAtLeast(0)
 
     var showBars by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -148,7 +157,9 @@ fun ReaderScreen(
         }
     }
 
-    LaunchedEffect(novelId, currentChapter, chapters.size) {
+    LaunchedEffect(novelId, currentChapter, chapters.size, progressLoaded) {
+        if (!progressLoaded || chapters.isEmpty()) return@LaunchedEffect
+
         withContext(Dispatchers.IO) {
             NovelStore.updateChapterWindow(
                 context = context,
@@ -156,6 +167,23 @@ fun ReaderScreen(
                 current = currentChapter,
                 chapterCount = chapters.size
             )
+        }
+    }
+
+    // Persist chapter + page after restoration, and on every position change.
+    LaunchedEffect(novelId, currentChapter, currentPage, progressLoaded, chapters) {
+        if (!progressLoaded || chapters.isEmpty()) return@LaunchedEffect
+
+        val chapterIndex = currentChapter.coerceIn(0, chapters.lastIndex)
+        val progress = ReadingProgress(
+            chapterNumber = chapterIndex,
+            blockIndex = 0,
+            byteOffset = chapters[chapterIndex].startByte,
+            pageIndex = currentPage.coerceAtLeast(0)
+        )
+
+        withContext(Dispatchers.IO) {
+            NovelStore.saveProgress(context, novelId, progress)
         }
     }
 
@@ -206,7 +234,9 @@ fun ReaderScreen(
             val prefetchMeasurer = rememberTextMeasurer()
 
             // Prefetch neighbouring chapters off the main thread.
-            LaunchedEffect(novelId, currentChapter, chapters.size, layoutKey) {
+            LaunchedEffect(novelId, currentChapter, chapters.size, layoutKey, progressLoaded) {
+                if (!progressLoaded || chapters.isEmpty()) return@LaunchedEffect
+
                 val window = withContext(Dispatchers.IO) {
                     NovelStore.getChapterWindowCache(
                         context = context,
@@ -242,22 +272,26 @@ fun ReaderScreen(
                 }
             }
 
-            val pages = rememberReaderPages(
-                chapter = currentChapter,
-                cache = paginationCache,
-                load = {
-                    withContext(Dispatchers.IO) {
-                        NovelStore
-                            .getChapterCache(context, novelId, currentChapter)
-                            .toBlocks()
-                    }
-                },
-                key = layoutKey,
-                density = density
-            )
+            val pages = if (progressLoaded && chapters.isNotEmpty()) {
+                rememberReaderPages(
+                    chapter = currentChapter,
+                    cache = paginationCache,
+                    load = {
+                        withContext(Dispatchers.IO) {
+                            NovelStore
+                                .getChapterCache(context, novelId, currentChapter)
+                                .toBlocks()
+                        }
+                    },
+                    key = layoutKey,
+                    density = density
+                )
+            } else {
+                emptyList()
+            }
 
-            LaunchedEffect(currentChapter, pages.size) {
-                if (pages.isNotEmpty()) {
+            LaunchedEffect(currentChapter, pages.size, progressLoaded) {
+                if (progressLoaded && pages.isNotEmpty()) {
                     currentPage = currentPage.coerceIn(0, pages.lastIndex)
                 }
             }
