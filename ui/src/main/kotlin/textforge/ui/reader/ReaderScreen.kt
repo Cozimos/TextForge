@@ -16,27 +16,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
+import textforge.parser.ChapterIndex
 import textforge.storage.NovelStore
 import textforge.ui.NovelColors
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import androidx.compose.ui.layout.LayoutCoordinates
-import org.json.JSONArray
-import textforge.parser.ChapterIndex
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.text.rememberTextMeasurer
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,53 +47,53 @@ fun ReaderScreen(
     val view = LocalView.current
     val activity = context as? Activity
 
-    // Immersive reader: hide status bar, keep navigation bar.
     // Immersive reader: hide system bars.
-DisposableEffect(activity, view) {
-    val window = activity?.window
+    DisposableEffect(activity, view) {
+        val window = activity?.window
 
-    if (window != null) {
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        val controller = WindowInsetsControllerCompat(window, view)
-        controller.hide(WindowInsetsCompat.Type.systemBars())
-        controller.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-    }
-
-    onDispose {
         if (window != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+
             val controller = WindowInsetsControllerCompat(window, view)
-            controller.show(WindowInsetsCompat.Type.systemBars())
-            WindowCompat.setDecorFitsSystemWindows(window, true)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+
+        onDispose {
+            if (window != null) {
+                val controller = WindowInsetsControllerCompat(window, view)
+                controller.show(WindowInsetsCompat.Type.systemBars())
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+            }
         }
     }
-}
+
     var chapters by remember(novelId) {
-    mutableStateOf<List<ChapterIndex>>(emptyList())
+        mutableStateOf<List<ChapterIndex>>(emptyList())
     }
 
     LaunchedEffect(novelId) {
-    chapters = withContext(Dispatchers.IO) {
-        NovelStore.getChapters(context, novelId)
+        chapters = withContext(Dispatchers.IO) {
+            NovelStore.getChapters(context, novelId)
         }
     }
 
     val lastChapter = (chapters.size - 1).coerceAtLeast(0)
 
     var currentChapter by remember(novelId) {
-    mutableIntStateOf(0)
+        mutableIntStateOf(0)
     }
 
     LaunchedEffect(novelId, chapters) {
-    if (chapters.isNotEmpty()) {
-    val progress = withContext(Dispatchers.IO) {
-            NovelStore.getProgress(context, novelId)
-        }
+        if (chapters.isNotEmpty()) {
+            val progress = withContext(Dispatchers.IO) {
+                NovelStore.getProgress(context, novelId)
+            }
 
-        currentChapter = progress.chapterNumber.coerceIn(
-            0,
-            chapters.lastIndex
+            currentChapter = progress.chapterNumber.coerceIn(
+                0,
+                chapters.lastIndex
             )
         }
     }
@@ -111,60 +110,53 @@ DisposableEffect(activity, view) {
     var selectedWord by remember { mutableStateOf<String?>(null) }
 
     val textLayouts = remember(currentChapter, currentPage) {
-    mutableStateMapOf<Int, TextLayoutResult>()
+        mutableStateMapOf<Int, TextLayoutResult>()
     }
 
     val textCoordinates = remember(currentChapter, currentPage) {
-    mutableStateMapOf<Int, LayoutCoordinates>()
+        mutableStateMapOf<Int, LayoutCoordinates>()
     }
 
     var readerCoordinates by remember {
-    mutableStateOf<LayoutCoordinates?>(null)
+        mutableStateOf<LayoutCoordinates?>(null)
     }
+
     var searchText by remember { mutableStateOf("") }
     var replaceText by remember { mutableStateOf("") }
 
-    val tocPageSize = 15
+    val tocPageSize = 13
 
     var tocPage by remember(novelId) {
         mutableIntStateOf(0)
     }
 
-    var blocks by remember(novelId, currentChapter) {
-    mutableStateOf<JSONArray?>(null)
-    }
-
-    LaunchedEffect(novelId, currentChapter) {
-    blocks = withContext(Dispatchers.IO) {
-        NovelStore.getChapterCache(context, novelId, currentChapter)
-        }
-    }
-
     val paginationCache = remember(novelId) {
-    ReaderPaginationCache()
-}
+        ReaderPaginationCache()
+    }
 
     val chapterPages = remember(novelId) {
-    mutableStateMapOf<Int, Int>()
-}
+        mutableStateMapOf<Int, Int>()
+    }
 
     fun goTo(chapter: Int) {
-    val target = chapter.coerceIn(0, lastChapter)
+        val target = chapter.coerceIn(0, lastChapter)
 
-    if (target != currentChapter) {
-        chapterPages[currentChapter] = currentPage
-        currentChapter = target
-        currentPage = chapterPages[target] ?: 0
+        if (target != currentChapter) {
+            chapterPages[currentChapter] = currentPage
+            currentChapter = target
+            currentPage = chapterPages[target] ?: 0
         }
     }
 
-    LaunchedEffect(novelId, currentChapter) {
-        NovelStore.updateChapterWindow(
-            context = context,
-            id = novelId,
-            current = currentChapter,
-            chapterCount = chapters.size
-        )
+    LaunchedEffect(novelId, currentChapter, chapters.size) {
+        withContext(Dispatchers.IO) {
+            NovelStore.updateChapterWindow(
+                context = context,
+                id = novelId,
+                current = currentChapter,
+                chapterCount = chapters.size
+            )
+        }
     }
 
     Box(
@@ -175,232 +167,234 @@ DisposableEffect(activity, view) {
 
         // READER PAGE AREA
         BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
+            modifier = Modifier.fillMaxSize()
         ) {
             val density = LocalDensity.current
-            val pageTextStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp,lineHeight = 18.sp
+
+            val pageTextStyle = MaterialTheme.typography.bodyLarge.copy(
+                fontSize = 17.sp,
+                lineHeight = 18.sp
             )
 
+            // Must match the Column padding below exactly.
+            val pagePad = 10.dp
+
             val widthPx = with(density) {
-                (maxWidth - 33.dp).roundToPx()
+                (maxWidth - pagePad * 2).roundToPx()
             }
 
             val heightPx = with(density) {
-                (maxHeight - 29.dp).roundToPx()
+                (maxHeight - pagePad * 2 - 4.dp).roundToPx()
             }
-            val prefetchMeasurer = rememberTextMeasurer()
 
-            LaunchedEffect(
-            novelId,
-            currentChapter,
-            chapters.size,
-            widthPx,
-            heightPx,
-            density.density,
-            density.fontScale,
-            pageTextStyle
-            ) {
-            val window = withContext(Dispatchers.IO) {
-            NovelStore.getChapterWindowCache(
-            context = context,
-            id = novelId,
-            current = currentChapter,
-            chapterCount = chapters.size
-        )
-    }
-
-    withContext(Dispatchers.Default) {
-        window.forEach { (chapter, chapterBlocks) ->
-
-            if (chapter == currentChapter) return@forEach
-
-            val cached = paginationCache.get(
-                chapter,
-                chapterBlocks,
-                widthPx.coerceAtLeast(1),
-                heightPx.coerceAtLeast(1),
-                density,
+            val layoutKey = remember(
+                widthPx,
+                heightPx,
+                density.density,
+                density.fontScale,
                 pageTextStyle
-            )
-
-            if (cached == null) {
-                calculateReaderPages(
-                    chapter = chapter,
-                    cache = paginationCache,
-                    blocks = chapterBlocks,
+            ) {
+                ReaderLayoutKey(
                     widthPx = widthPx.coerceAtLeast(1),
                     heightPx = heightPx.coerceAtLeast(1),
-                    density = density,
-                    style = pageTextStyle,
-                    measurer = prefetchMeasurer
+                    density = density.density,
+                    fontScale = density.fontScale,
+                    style = pageTextStyle
                 )
             }
-        }
-    }
-}
+
+            val prefetchMeasurer = rememberTextMeasurer()
+
+            // Prefetch neighbouring chapters off the main thread.
+            LaunchedEffect(novelId, currentChapter, chapters.size, layoutKey) {
+                val window = withContext(Dispatchers.IO) {
+                    NovelStore.getChapterWindowCache(
+                        context = context,
+                        id = novelId,
+                        current = currentChapter,
+                        chapterCount = chapters.size
+                    )
+                }
+
+                withContext(Dispatchers.Default) {
+                    window.forEach { (chapter, chapterBlocks) ->
+                        ensureActive()
+
+                        if (chapter == currentChapter) return@forEach
+
+                        if (paginationCache.get(chapter, layoutKey) == null) {
+                            val pagesForChapter = calculateReaderPages(
+                                blocks = chapterBlocks.toBlocks(),
+                                key = layoutKey,
+                                density = density,
+                                measurer = prefetchMeasurer
+                            )
+
+                            if (pagesForChapter.isNotEmpty()) {
+                                paginationCache.put(
+                                    chapter,
+                                    layoutKey,
+                                    pagesForChapter
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             val pages = rememberReaderPages(
-
                 chapter = currentChapter,
                 cache = paginationCache,
-
-                blocks = blocks ?: JSONArray(),
-                widthPx = widthPx.coerceAtLeast(1),
-                heightPx = heightPx.coerceAtLeast(1),
-                density = density,
-                style = pageTextStyle
+                load = {
+                    withContext(Dispatchers.IO) {
+                        NovelStore
+                            .getChapterCache(context, novelId, currentChapter)
+                            .toBlocks()
+                    }
+                },
+                key = layoutKey,
+                density = density
             )
 
             LaunchedEffect(currentChapter, pages.size) {
                 if (pages.isNotEmpty()) {
-                    currentPage = currentPage.coerceIn(
-                    0,
-                    pages.lastIndex
-            )
-        }
-    }
+                    currentPage = currentPage.coerceIn(0, pages.lastIndex)
+                }
+            }
 
             Column(
-    modifier = Modifier
-        .fillMaxSize()
-        .onGloballyPositioned {
-            readerCoordinates = it
-        }
-        .pointerInput(currentChapter, currentPage, pages.size) {
-            detectTapGestures(
-                onTap = { offset ->
-                    when {
-                        offset.x < size.width * 0.35f -> {
-                            if (currentPage > 0) {
-                                currentPage--
-                            } else if (currentChapter > 0) {
-                                goTo(currentChapter - 1)
-                            }
-                        }
-
-                        offset.x > size.width * 0.75f -> {
-                            if (currentPage < pages.lastIndex) {
-                                currentPage++
-                            } else if (currentChapter < lastChapter) {
-                                goTo(currentChapter + 1)
-                            }
-                        }
-
-                        else -> showBars = !showBars
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onGloballyPositioned {
+                        readerCoordinates = it
                     }
-                },
-                onLongPress = { offset ->
-                    val parent = readerCoordinates ?: return@detectTapGestures
-                    val pageBlocks = pages.getOrNull(currentPage)
-                        ?: return@detectTapGestures
+                    .pointerInput(currentChapter, currentPage, pages.size) {
+                        detectTapGestures(
+                            onTap = { offset ->
+                                when {
+                                    offset.x < size.width * 0.35f -> {
+                                        if (currentPage > 0) {
+                                            currentPage--
+                                        } else if (currentChapter > 0) {
+                                            goTo(currentChapter - 1)
+                                        }
+                                    }
 
-                    selectedWord = null
+                                    offset.x > size.width * 0.75f -> {
+                                        if (currentPage < pages.lastIndex) {
+                                            currentPage++
+                                        } else if (currentChapter < lastChapter) {
+                                            goTo(currentChapter + 1)
+                                        }
+                                    }
 
-                    pageBlocks.forEachIndexed { index, block ->
-                        val coordinates = textCoordinates[index]
-                            ?: return@forEachIndexed
+                                    else -> showBars = !showBars
+                                }
+                            },
+                            onLongPress = { offset ->
+                                val parent = readerCoordinates
+                                    ?: return@detectTapGestures
+                                val pageBlocks = pages.getOrNull(currentPage)
+                                    ?: return@detectTapGestures
 
-                        val layout = textLayouts[index]
-                            ?: return@forEachIndexed
+                                selectedWord = null
 
-                        if (block.text.isEmpty()) return@forEachIndexed
+                                pageBlocks.forEachIndexed { index, block ->
+                                    val coordinates = textCoordinates[index]
+                                        ?: return@forEachIndexed
 
-                        val localOffset = coordinates.localPositionOf(
-                            parent,
-                            offset
+                                    val layout = textLayouts[index]
+                                        ?: return@forEachIndexed
+
+                                    if (block.text.isEmpty()) return@forEachIndexed
+
+                                    val localOffset = coordinates.localPositionOf(
+                                        parent,
+                                        offset
+                                    )
+
+                                    if (
+                                        localOffset.x < 0f ||
+                                        localOffset.y < 0f ||
+                                        localOffset.x > coordinates.size.width.toFloat() ||
+                                        localOffset.y > coordinates.size.height.toFloat()
+                                    ) return@forEachIndexed
+
+                                    val characterOffset = layout
+                                        .getOffsetForPosition(localOffset)
+                                        .coerceIn(0, block.text.length - 1)
+
+                                    val wordRange =
+                                        layout.getWordBoundary(characterOffset)
+
+                                    val word = block.text.text
+                                        .substring(wordRange.start, wordRange.end)
+                                        .trim()
+
+                                    if (word.isNotEmpty()) {
+                                        selectedWord = word
+                                        return@forEachIndexed
+                                    }
+                                }
+                            }
                         )
+                    }
+                    .padding(pagePad)
+            ) {
+                pages.getOrNull(currentPage)?.forEachIndexed { index, pageBlock ->
+                    val onLayout: (TextLayoutResult) -> Unit = {
+                        textLayouts[index] = it
+                    }
 
-                        if (
-                            localOffset.x < 0f ||
-                            localOffset.y < 0f ||
-                            localOffset.x > coordinates.size.width.toFloat() ||
-                            localOffset.y > coordinates.size.height.toFloat()
-                        ) return@forEachIndexed
+                    val onPositioned: (LayoutCoordinates) -> Unit = {
+                        textCoordinates[index] = it
+                    }
 
-                        val characterOffset = layout
-                            .getOffsetForPosition(localOffset)
-                            .coerceIn(0, block.text.length - 1)
-
-                        val wordRange = layout.getWordBoundary(characterOffset)
-
-                        val word = block.text.text
-                            .substring(wordRange.start, wordRange.end)
-                            .trim()
-
-                        if (word.isNotEmpty()) {
-                            selectedWord = word
-                            return@forEachIndexed
+                    when {
+                        pageBlock.heading -> {
+                            Text(
+                                text = pageBlock.text,
+                                style = pageTextStyle,
+                                modifier = Modifier
+                                    .padding(vertical = 10.dp)
+                                    .onGloballyPositioned(onPositioned),
+                                onTextLayout = onLayout
+                            )
                         }
+
+                        pageBlock.fullHighlight -> {
+                            textforge.ui.components.HighlightedParagraph(
+                                text = pageBlock.text,
+                                onTextLayout = onLayout,
+                                onTextPositioned = onPositioned
+                            )
+                        }
+
+                        else -> {
+                            textforge.ui.components.InlineHighlight(
+                                text = pageBlock.text,
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                onTextLayout = onLayout,
+                                onTextPositioned = onPositioned
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        selectedWord?.let { word ->
+            AlertDialog(
+                onDismissRequest = { selectedWord = null },
+                title = { Text(word) },
+                text = { Text("Dictionary lookup") },
+                confirmButton = {
+                    TextButton(onClick = { selectedWord = null }) {
+                        Text("Close")
                     }
                 }
             )
         }
-        .padding(10.dp)
-) {
-    pages.getOrNull(currentPage)?.forEachIndexed { index, pageBlock ->
-        val onLayout: (TextLayoutResult) -> Unit = {
-            textLayouts[index] = it
-        }
-
-        val onPositioned: (LayoutCoordinates) -> Unit = {
-            textCoordinates[index] = it
-        }
-
-        when {
-            pageBlock.heading -> {
-                Text(
-                    text = pageBlock.text,
-                    style = pageTextStyle,
-                    modifier = Modifier
-                        .padding(vertical = 10.dp)
-                        .onGloballyPositioned(onPositioned),
-                    onTextLayout = onLayout
-                )
-            }
-
-            pageBlock.fullHighlight -> {
-                textforge.ui.components.HighlightedParagraph(
-                    text = pageBlock.text,
-                    onTextLayout = onLayout,
-                    onTextPositioned = onPositioned
-                )
-            }
-
-            else -> {
-                textforge.ui.components.InlineHighlight(
-                    text = pageBlock.text,
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    onTextLayout = onLayout,
-                    onTextPositioned = onPositioned
-                )
-            }
-        }
-    }
-}
-        selectedWord?.let { word ->
-    AlertDialog(
-        onDismissRequest = {
-            selectedWord = null
-            },
-        title = {
-            Text(word)
-            },
-        text = {
-            Text("Dictionary lookup")
-            },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    selectedWord = null
-                    }
-            ) {
-                Text("Close")
-            }
-        }
-    )
-}
-    
 
         // TOP READER BAR
         AnimatedVisibility(
@@ -533,7 +527,7 @@ DisposableEffect(activity, view) {
         }
     }
 
-        // TABLE OF CONTENTS
+    // TABLE OF CONTENTS
     if (showTOC) {
         Dialog(
             onDismissRequest = { showTOC = false }
@@ -560,7 +554,7 @@ DisposableEffect(activity, view) {
                     val end = minOf(start + tocPageSize, chapters.size)
 
                     LazyColumn(
-                        modifier = Modifier.heightIn(max = 1000.dp)
+                        modifier = Modifier.heightIn(max = 900.dp)
                     ) {
                         itemsIndexed(chapters.subList(start, end)) { index, chapter ->
                             val chapterIndex = start + index
@@ -574,7 +568,7 @@ DisposableEffect(activity, view) {
                                     .fillMaxWidth()
                                     .height(48.dp),
                                 contentPadding = PaddingValues(
-                                    horizontal = 8.dp,
+                                    horizontal = 7.dp,
                                     vertical = 0.dp
                                 )
                             ) {
@@ -630,7 +624,7 @@ DisposableEffect(activity, view) {
                             vertical = 0.dp
                         )
                     ) {
-                    Text("Close")
+                        Text("Close")
                     }
                 }
             }
@@ -689,9 +683,8 @@ DisposableEffect(activity, view) {
             confirmButton = {
                 TextButton(onClick = { showReplace = false }) {
                     Text("Replace")
-                    }
                 }
-            )
-        }
+            }
+        )
     }
 }
