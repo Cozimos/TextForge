@@ -421,6 +421,36 @@ fun updateChapterWindow(
         }
     }
 }
+
+    fun getChapterWindowCache(
+    context: Context,
+    id: String,
+    current: Int,
+    chapterCount: Int,
+    backward: Int = 1,
+    forward: Int = 2
+): List<Pair<Int, JSONArray>> {
+    if (chapterCount <= 0) return emptyList()
+
+    val chapter = current.coerceIn(0, chapterCount - 1)
+
+    updateChapterWindow(
+        context = context,
+        id = id,
+        current = chapter,
+        chapterCount = chapterCount,
+        backward = backward,
+        forward = forward
+    )
+
+    val start = maxOf(0, chapter - backward)
+    val end = minOf(chapterCount - 1, chapter + forward)
+
+    return (start..end).map { target ->
+        target to getChapterCache(context, id, target)
+    }
+}
+
     fun saveProgress(
         context: Context,
         id: String,

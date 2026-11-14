@@ -36,6 +36,7 @@ import textforge.parser.ChapterIndex
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.rememberTextMeasurer
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,31 +49,24 @@ fun ReaderScreen(
     val activity = context as? Activity
 
     // Immersive reader: hide status bar, keep navigation bar.
-    DisposableEffect(activity, view) {
+    // Immersive reader: hide system bars.
+DisposableEffect(activity, view) {
     val window = activity?.window
-    val oldNavigationBarColor = window?.navigationBarColor
 
     if (window != null) {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         val controller = WindowInsetsControllerCompat(window, view)
-        controller.hide(WindowInsetsCompat.Type.statusBars())
-        controller.show(WindowInsetsCompat.Type.navigationBars())
-
-        window.navigationBarColor = android.graphics.Color.TRANSPARENT
-        controller.isAppearanceLightNavigationBars = false
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     }
 
     onDispose {
         if (window != null) {
             val controller = WindowInsetsControllerCompat(window, view)
-            controller.show(WindowInsetsCompat.Type.statusBars())
-
+            controller.show(WindowInsetsCompat.Type.systemBars())
             WindowCompat.setDecorFitsSystemWindows(window, true)
-
-            oldNavigationBarColor?.let {
-                window.navigationBarColor = it
-            }
         }
     }
 }
@@ -195,6 +189,56 @@ fun ReaderScreen(
             val heightPx = with(density) {
                 (maxHeight - 30.dp).roundToPx()
             }
+            val prefetchMeasurer = rememberTextMeasurer()
+
+            LaunchedEffect(
+            novelId,
+            currentChapter,
+            chapters.size,
+            widthPx,
+            heightPx,
+            density.density,
+            density.fontScale,
+            pageTextStyle
+            ) {
+            val window = withContext(Dispatchers.IO) {
+            NovelStore.getChapterWindowCache(
+            context = context,
+            id = novelId,
+            current = currentChapter,
+            chapterCount = chapters.size
+        )
+    }
+
+    withContext(Dispatchers.Default) {
+        window.forEach { (chapter, chapterBlocks) ->
+
+            if (chapter == currentChapter) return@forEach
+
+            val cached = paginationCache.get(
+                chapter,
+                chapterBlocks,
+                widthPx.coerceAtLeast(1),
+                heightPx.coerceAtLeast(1),
+                density,
+                pageTextStyle
+            )
+
+            if (cached == null) {
+                calculateReaderPages(
+                    chapter = chapter,
+                    cache = paginationCache,
+                    blocks = chapterBlocks,
+                    widthPx = widthPx.coerceAtLeast(1),
+                    heightPx = heightPx.coerceAtLeast(1),
+                    density = density,
+                    style = pageTextStyle,
+                    measurer = prefetchMeasurer
+                )
+            }
+        }
+    }
+}
 
             val pages = rememberReaderPages(
 
