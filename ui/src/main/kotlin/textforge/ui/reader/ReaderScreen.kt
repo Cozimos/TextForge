@@ -201,7 +201,7 @@ fun ReaderScreen(
                 chapter = currentChapter,
                 cache = paginationCache,
 
-                blocks = blocks,
+                blocks = blocks ?: JSONArray(),
                 widthPx = widthPx.coerceAtLeast(1),
                 heightPx = heightPx.coerceAtLeast(1),
                 density = density,
@@ -643,8 +643,9 @@ fun ReaderScreen(
             confirmButton = {
                 TextButton(onClick = { showReplace = false }) {
                     Text("Replace")
+                    }
                 }
-            }
-        )
+            )
+        }
     }
 }

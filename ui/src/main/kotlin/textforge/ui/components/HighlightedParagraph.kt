@@ -14,14 +14,13 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 
+
 @Composable
 fun HighlightedParagraph(
-    onTextPositioned: (LayoutCoordinates) -> Unit = {},
     text: AnnotatedString,
-    modifier = Modifier
-    .padding(4.dp)
-    .onGloballyPositioned(onTextPositioned),
-    onTextLayout: (TextLayoutResult) -> Unit = {}
+    modifier: Modifier = Modifier,
+    onTextLayout: (TextLayoutResult) -> Unit = {},
+    onTextPositioned: (LayoutCoordinates) -> Unit = {}
 ) {
 
     Surface(
@@ -33,12 +32,14 @@ fun HighlightedParagraph(
     ) {
 
     Text(
-    text = text,
-    modifier = Modifier.padding(4.dp),
-    color = Color(0xFF252525),
-    fontSize = 17.sp,
-    lineHeight = 18.sp,
-    onTextLayout = onTextLayout
+        text = text,
+        modifier = Modifier
+            .padding(4.dp)
+            .onGloballyPositioned(onTextPositioned),
+        color = Color(0xFF252525),
+        fontSize = 17.sp,
+        lineHeight = 18.sp,
+        onTextLayout = onTextLayout
         )
     }
 }
