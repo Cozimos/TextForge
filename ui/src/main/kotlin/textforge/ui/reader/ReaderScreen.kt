@@ -124,13 +124,13 @@ DisposableEffect(activity, view) {
     var searchText by remember { mutableStateOf("") }
     var replaceText by remember { mutableStateOf("") }
 
-    val tocPageSize = 11
+    val tocPageSize = 15
 
     var tocPage by remember(novelId) {
         mutableIntStateOf(0)
     }
 
-    var blocks by remember(novelId) {
+    var blocks by remember(novelId, currentChapter) {
     mutableStateOf<JSONArray?>(null)
     }
 
@@ -187,7 +187,7 @@ DisposableEffect(activity, view) {
             }
 
             val heightPx = with(density) {
-                (maxHeight - 30.dp).roundToPx()
+                (maxHeight - 29.dp).roundToPx()
             }
             val prefetchMeasurer = rememberTextMeasurer()
 
@@ -253,11 +253,13 @@ DisposableEffect(activity, view) {
             )
 
             LaunchedEffect(currentChapter, pages.size) {
-                currentPage = currentPage.coerceIn(
+                if (pages.isNotEmpty()) {
+                    currentPage = currentPage.coerceIn(
                     0,
-                    pages.lastIndex.coerceAtLeast(0)
-                )
-            }
+                    pages.lastIndex
+            )
+        }
+    }
 
             Column(
     modifier = Modifier
@@ -558,7 +560,7 @@ DisposableEffect(activity, view) {
                     val end = minOf(start + tocPageSize, chapters.size)
 
                     LazyColumn(
-                        modifier = Modifier.heightIn(max = 800.dp)
+                        modifier = Modifier.heightIn(max = 1000.dp)
                     ) {
                         itemsIndexed(chapters.subList(start, end)) { index, chapter ->
                             val chapterIndex = start + index
@@ -570,7 +572,7 @@ DisposableEffect(activity, view) {
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(36.dp),
+                                    .height(48.dp),
                                 contentPadding = PaddingValues(
                                     horizontal = 8.dp,
                                     vertical = 0.dp

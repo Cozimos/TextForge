@@ -128,7 +128,7 @@ internal fun calculateReaderPages(
     var usedHeight = 0
 
     val paragraphPadding = with(density) { 8.dp.roundToPx() }
-    val headingPadding = with(density) { 12.dp.roundToPx() }
+    val headingPadding = with(density) { 10.dp.roundToPx() }
     val safetyMargin = with(density) { 4.dp.roundToPx() }
 
     fun finishPage() {
